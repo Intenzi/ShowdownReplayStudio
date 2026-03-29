@@ -10,26 +10,34 @@ const generateRandom = () =>
 
 ffmpeg.setFfmpegPath(ffmpegPath); // bundled ffmpeg, no separate install needed
 
-async function waitUntilVictory(timeout, page) {
-  return Promise.race([
-    checkForVictory(page),
-    new Promise((_, reject) => setTimeout(reject, timeout)),
-  ]);
-}
-
-async function checkForVictory(page) {
-  // Use a loop instead of recursion to avoid call stack issues on long battles
-  while (true) {
+async function waitUntilVictory(timeout, page, onProgress) {
+  // Safety timeout: stop the loop if the battle doesn't end within the specified time (e.g., page hang)
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
     try {
-      let victory = await page.$$eval('div[class="battle-history"]', (els) =>
-        els.map((e) => e.textContent),
-      );
-      victory = victory[victory.length - 1].endsWith(" won the battle!");
+      // Direct extraction of the turn number from the field overlay (more efficient than scanning the log)
+      const turnNumber = await page.evaluate(() => {
+        const turnDiv = document.querySelector(".innerbattle .turn");
+        if (turnDiv) {
+          // Text is typically "Turn 1", "Turn 2", etc.
+          return parseInt(turnDiv.innerText.replace("Turn ", "")) || 0;
+        }
+        return 0;
+      });
+
+      const victory = await page.evaluate(() => {
+        const els = document.querySelectorAll("div.battle-history");
+        if (els.length === 0) return false;
+        const lastLog = els[els.length - 1].textContent;
+        return lastLog.endsWith(" won the battle!");
+      });
+
+      if (onProgress) onProgress(turnNumber);
       if (victory) return;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } catch (err) {
+      console.error("Error in waitUntilVictory loop:", err);
     }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
 
@@ -201,6 +209,5 @@ async function fixwebm(fileId, outputFolder) {
 module.exports = {
   download,
   waitUntilVictory,
-  checkForVictory,
   fixwebm,
 };
