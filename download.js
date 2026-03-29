@@ -7,34 +7,26 @@ const fs = require("fs");
 const yargs = require("yargs");
 
 async function waitUntilVictory(timeout, page) {
-  let ret = new Promise(async (resolve, reject) => {
-    setTimeout(() => {
-      if (!ret.isResolved) {
-        reject();
-      }
-    }, timeout);
-
-    await checkForVictory(page);
-    resolve();
-  });
-  return ret;
+  return Promise.race([
+    checkForVictory(page),
+    new Promise((_, reject) => setTimeout(reject, timeout)),
+  ]);
 }
 
 async function checkForVictory(page) {
-  try {
-    victory = await page.$$eval('div[class="battle-history"]', (els) =>
-      els.map((e) => e.textContent),
-    );
-    victory = victory[victory.length - 1].endsWith(" won the battle!");
-
-    if (!victory) {
-      // Wait for 1 second before calling checkForVictory again
+  // Use a loop instead of recursion to avoid call stack issues on long battles
+  while (true) {
+    try {
+      let victory = await page.$$eval('div[class="battle-history"]', (els) =>
+        els.map((e) => e.textContent),
+      );
+      victory = victory[victory.length - 1].endsWith(" won the battle!");
+      if (victory) return;
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      await checkForVictory(page);
-    } else {
-      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-  } catch {}
+  }
 }
 
 // Create a FFmpeg command to fix the metadata
