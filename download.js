@@ -4,6 +4,7 @@ const ffmpegPath = require("ffmpeg-static");
 
 ffmpeg.setFfmpegPath(ffmpegPath); // bundled ffmpeg, no separate install needed
 const fs = require("fs");
+const path = require("path");
 const yargs = require("yargs");
 
 async function waitUntilVictory(timeout, page) {
