@@ -1,0 +1,19 @@
+{
+  "name": "gothitellebot",
+  "version": "1.0.0",
+  "description": "Discord bot component for Showdown Replay Downloader",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
+  },
+  "author": "intenzi",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.13.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "puppeteer": "^21.1.1",
+    "puppeteer-stream": "^3.0.7",
+    "yargs": "^17.7.2"
+  }
+}
