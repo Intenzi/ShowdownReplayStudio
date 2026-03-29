@@ -41,7 +41,7 @@ function saveConfig(config) {
 
 // ── Version check via GitHub Releases ───────────────────────────────────────
 const CURRENT_VERSION = require("./package.json").version;
-const GITHUB_REPO = "yourname/showdown-recorder"; // TODO: update before publishing
+const GITHUB_REPO = "Intenzi/ShowdownReplayDownloader";
 
 async function checkForUpdates() {
   try {
@@ -57,7 +57,6 @@ async function checkForUpdates() {
   } catch {}
   return null;
 }
-
 
 // ── Express + Socket.io setup ────────────────────────────────────────────────
 const app = express();
@@ -139,15 +138,25 @@ io.on("connection", (socket) => {
     }
     socket.emit("log", { msg: "Launching browser...", type: "info" });
     try {
-      const width = 1100;
-      const height = 540; // 340 original (added +200 due to two chrome's popups 100h each of (a) -> download non-test version chrome and (b) -> Chrome is being controlled by automated test software)
       browser = await launch({
         executablePath: require("puppeteer").executablePath(),
-        defaultViewport: { width: 0, height: 364 },
+        // Setting defaultViewport to null tells Puppeteer to use the launched window size
+        // instead of forcing it to match the requested viewport dimensions.
+        defaultViewport: null,
+        // This completely disables the "Chrome is being controlled by automated test software" infobar!
+        ignoreDefaultArgs: ["--enable-automation"],
         args: [
-          `--window-size=${width},${height}`,
+          `--window-size=1280,500`,
           `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-          `--headless=new`,
+          // `--headless=new`,
+          // Platform Agnosticism: Force a 1.0 device scale factor so retina/4K monitors
+          // don't secretly record at 2x or 3x resolution.
+          `--force-device-scale-factor=1`,
+          // Platform Agnosticism: Hide scrollbars so they don't eat into the right-side pixels
+          `--hide-scrollbars`,
+          // Disable default browser popups/prompts to prevent viewport shifting
+          `--disable-notifications`,
+          `--disable-infobars`,
         ],
       });
       socket.emit("log", { msg: "✅ Browser ready!", type: "success" });
