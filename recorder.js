@@ -41,7 +41,7 @@ async function waitUntilVictory(timeout, page, onProgress) {
   }
 }
 
-async function download(link, browser, config, emitLog, emitProgress) {
+async function download(link, id, browser, config, emitLog, emitProgress) {
   const { nochat, nomusic, noaudio, theme, speed, outputFolder } = config;
 
   if (
@@ -67,7 +67,8 @@ async function download(link, browser, config, emitLog, emitProgress) {
 
   const data = await response.json();
   const matches = Array.from(data.log.matchAll(/\n\|turn\|(\d+)\n/g));
-  const totalTurns = parseInt(matches[matches.length - 1][1]);
+  const totalTurns =
+    matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
   const fileId = generateRandom();
 
   try {
@@ -131,16 +132,38 @@ async function download(link, browser, config, emitLog, emitProgress) {
     stream.pipe(file);
 
     const estimate = ((totalTurns * 7) / 60).toFixed(2);
-    const logMsg = `⚔️  Recording ${data.p1} vs ${data.p2} (${data.format}) — ${totalTurns} turns, ~${estimate}min`;
+    const playersLabel = data.players
+      ? data.players.join(" vs ")
+      : "Unknown Battle";
+    const logMsg = `⚔️  Recording ${playersLabel} (${data.format}) — ${totalTurns} turns, ~${estimate}min`;
     if (emitLog) emitLog(logMsg, "info");
-    else console.log(logMsg); // the estimate is based upon my observation for "normal" speed replays
+    else console.log(logMsg);
 
-    if (emitProgress) emitProgress(link, "recording");
+    const onProgress = (currentTurn) => {
+      if (emitProgress) {
+        // Calculate progress percentage, capped at 99% until fully done
+        const progress =
+          totalTurns > 0
+            ? Math.min(Math.floor((currentTurn / totalTurns) * 100), 99)
+            : 0;
 
-    // Start checking for victory, upto 5 minutes (aka record time limit)
-    // You might want to modify this for super long videos as with endless battle clause, a battle can last upto 1000 turns which is approx 1 hour and 56 minutes at normal speed
+        emitProgress(id, link, "recording", {
+          players: playersLabel,
+          format: data.format,
+          currentTurn,
+          totalTurns,
+          progress: Math.max(progress, 10), // Start at 10%
+          speed: speed || "normal",
+        });
+      }
+    };
+
+    // Initial progress report
+    onProgress(0);
+
+    // Start checking for victory, up to 10 minutes (some matches can be long)
     try {
-      await waitUntilVictory(150000, page);
+      await waitUntilVictory(600000, page, onProgress);
     } catch {}
 
     // Wait for 2 seconds so that the battle has completely ended as we read the text earlier than it getting fully animated
@@ -149,7 +172,7 @@ async function download(link, browser, config, emitLog, emitProgress) {
     stream.destroy();
     file.close();
 
-    const fixMsg = `🎬 Fixing metadata for ${data.p1} vs ${data.p2}...`;
+    const fixMsg = `🎬 Fixing metadata for ${playersLabel}...`;
     if (emitLog) emitLog(fixMsg, "info");
     else console.log(`Finished recording ${link}`);
 
@@ -158,7 +181,7 @@ async function download(link, browser, config, emitLog, emitProgress) {
     const saveMsg = `✅ Saved → ${path.join(outputFolder, `replay-${fileId}.webm`)}`;
     if (emitLog) {
       emitLog(saveMsg, "success");
-      emitProgress(link, "done");
+      emitProgress(id, link, "done", { filename: `replay-${fileId}.webm` });
     } else {
       console.log(
         `Recording Saved!\nLocation -> ${path.join(outputFolder, `replay-${fileId}.webm`)}`,
@@ -180,7 +203,7 @@ async function download(link, browser, config, emitLog, emitProgress) {
     } catch {}
     if (emitLog) {
       emitLog(`❌ Error recording ${link}\n${err}`, "error");
-      emitProgress(link, "error");
+      emitProgress(id, link, "error");
     } else {
       console.log(`An error occured while downloading ${link}\n` + err);
     }
