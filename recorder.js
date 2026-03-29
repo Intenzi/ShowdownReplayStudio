@@ -68,6 +68,11 @@ async function download(link, browser, config, emitLog, emitProgress) {
       path.join(outputFolder, `replay-${fileId}-temp.webm`),
     );
     const page = await browser.newPage();
+    await page.setViewport({
+      width: nochat ? 640 : 1100,
+      height: 362,
+      deviceScaleFactor: 1,
+    });
     await page.goto(link, { waitUntil: "load" });
 
     await page.addStyleTag({
@@ -97,7 +102,7 @@ async function download(link, browser, config, emitLog, emitProgress) {
 
     if (nomusic) await page.select('select[name="sound"]', "musicoff");
     else if (noaudio) await page.select('select[name="sound"]', "off");
-    
+
     // Theme
     if (theme !== "auto") await page.select('select[name="darkmode"]', theme);
 
@@ -147,7 +152,9 @@ async function download(link, browser, config, emitLog, emitProgress) {
       emitLog(saveMsg, "success");
       emitProgress(link, "done");
     } else {
-      console.log(`Recording Saved!\nLocation -> ${path.join(outputFolder, `replay-${fileId}.webm`)}`);
+      console.log(
+        `Recording Saved!\nLocation -> ${path.join(outputFolder, `replay-${fileId}.webm`)}`,
+      );
     }
 
     try {
@@ -175,7 +182,9 @@ async function download(link, browser, config, emitLog, emitProgress) {
 // Updated fixwebm to use outputFolder
 async function fixwebm(fileId, outputFolder) {
   return new Promise((resolve, reject) => {
-    const command = ffmpeg(path.join(outputFolder, `replay-${fileId}-temp.webm`))
+    const command = ffmpeg(
+      path.join(outputFolder, `replay-${fileId}-temp.webm`),
+    )
       .withVideoCodec("copy")
       .withAudioCodec("copy") // Copy the video and audio streams without re-encoding
       .output(path.join(outputFolder, `replay-${fileId}.webm`))
