@@ -168,7 +168,7 @@ async function download(link, browser, nochat, nomusic, noaudio, theme, speed) {
 
 const generateRandom = () =>
   Math.random().toString(36).substring(2, 15) +
-  Math.random().toString(23).substring(2, 5); // simplistic simple https://stackoverflow.com/a/71262982/14393614
+  Math.random().toString(36).substring(2, 5); // simplistic simple https://stackoverflow.com/a/71262982/14393614
 
 const argv = yargs(process.argv.slice(2))
   .usage('Usage: $0 -l "[replays]"')
@@ -249,7 +249,7 @@ const argv = yargs(process.argv.slice(2))
       else {
         // chunk the links into smaller lists of size -> bulk
         for (let i = 0; i < links.length; i += bulk) {
-          toRecord.push();
+          toRecord.push(links.slice(i, i + bulk));
         }
       }
     } else
