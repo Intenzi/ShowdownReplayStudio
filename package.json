@@ -1,13 +1,13 @@
 {
-  "name": "showdown-recorder",
-  "version": "1.0.0",
-  "description": "Pokemon Showdown replay recorder",
+  "name": "showdown-replay-studio",
+  "version": "1.1.0",
+  "description": "Professional tool to record and download Pokemon Showdown replays.",
   "main": "main.js",
   "scripts": {
     "start": "node main.js",
-    "build:win": "pkg . --targets node18-win-x64 --output dist/showdown-recorder-win.exe --compress GZip",
-    "build:mac": "pkg . --targets node18-mac-x64 --output dist/showdown-recorder-mac --compress GZip",
-    "build:linux": "pkg . --targets node18-linux-x64 --output dist/showdown-recorder-linux --compress GZip",
+    "build:win": "pkg . --targets node18-win-x64 --output dist/showdown-studio-win.exe --compress GZip",
+    "build:mac": "pkg . --targets node18-mac-x64 --output dist/showdown-studio-mac --compress GZip",
+    "build:linux": "pkg . --targets node18-linux-x64 --output dist/showdown-studio-linux --compress GZip",
     "build:all": "mkdir -p dist && npm run build:win && npm run build:mac && npm run build:linux"
   },
   "pkg": {
