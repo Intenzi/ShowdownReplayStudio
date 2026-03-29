@@ -1,11 +1,10 @@
-const { launch, getStream } = require("puppeteer-stream");
+const { getStream } = require("puppeteer-stream");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("ffmpeg-static");
-
-ffmpeg.setFfmpegPath(ffmpegPath); // bundled ffmpeg, no separate install needed
 const fs = require("fs");
 const path = require("path");
-const yargs = require("yargs");
+
+ffmpeg.setFfmpegPath(ffmpegPath); // bundled ffmpeg, no separate install needed
 
 async function waitUntilVictory(timeout, page) {
   return Promise.race([
@@ -48,6 +47,10 @@ async function fixwebm(fileId) {
     command.run();
   });
 }
+
+const generateRandom = () =>
+  Math.random().toString(36).substring(2, 15) +
+  Math.random().toString(36).substring(2, 5); // simplistic simple https://stackoverflow.com/a/71262982/14393614
 
 async function download(link, browser, nochat, nomusic, noaudio, theme, speed) {
   if (
@@ -167,127 +170,9 @@ async function download(link, browser, nochat, nomusic, noaudio, theme, speed) {
   }
 }
 
-const generateRandom = () =>
-  Math.random().toString(36).substring(2, 15) +
-  Math.random().toString(36).substring(2, 5); // simplistic simple https://stackoverflow.com/a/71262982/14393614
-
-const argv = yargs(process.argv.slice(2))
-  .usage('Usage: $0 -l "[replays]"')
-  .demandOption(["links"])
-  .option("links", {
-    alias: "l",
-    describe: "List of ps replay links separated by a comma or space",
-    type: "string",
-    demandOption: true,
-  })
-  .option("nomusic", {
-    describe: "Disable music (battle cries don't get muted)",
-    type: "boolean",
-    default: false,
-  })
-  .option("noaudio", {
-    describe: "Disable audio (disables music too obviously)",
-    type: "boolean",
-    default: false,
-  })
-  .option("speed", {
-    alias: "s",
-    describe: "Speed (really fast, fast, normal, slow, really slow)",
-    choices: ["normal", "fast", "slow", "really slow", "really fast"],
-    default: "normal",
-  })
-  .option("nochat", {
-    describe: "Will not record chat",
-    type: "boolean",
-    default: false,
-  })
-  .option("theme", {
-    alias: "t",
-    describe: "Color Scheme",
-    choices: ["auto", "dark", "light"],
-    default: "auto",
-  })
-  .option("bulk", {
-    alias: "b",
-    describe: 'Bulk record option (a number >= 1 or "all")',
-    type: "string",
-    default: "all",
-  })
-  .help("h")
-  .alias("h", "help").argv;
-
-(async () => {
-  const links = argv.links.split(/[\s,]+/).filter(Boolean); // https://stackoverflow.com/a/23728809/14393614
-  const nomusic = argv.nomusic;
-  const noaudio = argv.noaudio;
-  const speed = argv.speed;
-  const nochat = argv.nochat;
-  const theme = argv.theme;
-  let bulk = argv.bulk;
-
-  if (parseInt(bulk) && bulk >= 1) {
-    bulk = parseInt(bulk);
-    if (bulk > links.length) {
-      bulk = links.length;
-    }
-  } else if (bulk !== "all") {
-    console.log(
-      `Invalid value: Argument bulk, Given: "${bulk}", Takes: all/a number 1 or above.`,
-    );
-    process.exit();
-  }
-  console.log("--Booting Downloader--");
-  try {
-    fs.mkdirSync("./replays");
-  } catch {}
-  const toRecord = [];
-  if (links.length > 1) {
-    if (bulk === "all" || bulk > 1) {
-      console.log(
-        `Bulk recording is enabled, thus ${bulk} videos will be recorded simultaneously. (This may cause poorer recorded quality)\n(Optional) Set bulk to 1 (via -b 1) to record only one video at a time for optimum quality.\n[node download.js -h to view syntax, all arguments]`,
-      );
-      if (bulk === "all") toRecord.push(links);
-      else {
-        // chunk the links into smaller lists of size -> bulk
-        for (let i = 0; i < links.length; i += bulk) {
-          toRecord.push(links.slice(i, i + bulk));
-        }
-      }
-    } else
-      console.log(
-        "Bulk recording is disabled (set to 1). Thus replays will be downloaded one at a time.",
-      );
-  }
-
-  width = nochat ? 640 : 1100;
-  height = 540; // 340 original (added +200 due to two chrome's popups 100h each of (a) -> download non-test version chrome and (b) -> Chrome is being controlled by automated test software)
-  const args = [`--window-size=${width},${height}`, `--headless=new`];
-
-  const browser = await launch({
-    executablePath: require("puppeteer").executablePath(),
-    defaultViewport: {
-      width: 0,
-      height: 364,
-    },
-    args: args,
-  });
-  if (links.length > 1 && (bulk === "all" || bulk > 1)) {
-    let bulkRecord = [];
-    for (let recordLinks of toRecord) {
-      for (let link of recordLinks)
-        bulkRecord.push(
-          download(link, browser, nochat, nomusic, noaudio, theme, speed),
-        );
-
-      await Promise.all(bulkRecord); // wait on all recordings to occur simultaneously
-      bulkRecord = []; // reset array
-    }
-  } else {
-    for (let link of links)
-      await download(link, browser, nochat, nomusic, noaudio, theme, speed); // record one by one
-  }
-  console.log("Thankyou for utilising Showdown Replay Downloader!!");
-  try {
-    await browser.close();
-  } catch {}
-})();
+module.exports = {
+  download,
+  waitUntilVictory,
+  checkForVictory,
+  fixwebm,
+};
