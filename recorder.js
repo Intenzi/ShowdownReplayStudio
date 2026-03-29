@@ -69,7 +69,7 @@ async function download(link, browser, config, emitLog, emitProgress) {
     );
     const page = await browser.newPage();
     await page.setViewport({
-      width: nochat ? 640 : 1100,
+      width: nochat ? 642 : 1100,
       height: 362,
       deviceScaleFactor: 1,
     });
