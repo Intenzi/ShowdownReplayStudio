@@ -1,4 +1,4 @@
-# Showdown Replay Downloader (v1.0)
+# Showdown Replay Studio (v1.1)
 
 An _actual_ Pokémon Showdown Replay Downloader.
 
@@ -41,17 +41,19 @@ You can click on Code -> Download zip and then unzip the downloaded project.
     3. Untick all the priveleged intents that are enabled (you won't be needing them)![](https://cdn.discordapp.com/attachments/1006770227687718952/1159863545324904508/image.png?ex=6532921a&is=65201d1a&hm=5985af37c4a68b86c8ea027a36bb641c2742ea827f6d8cf463edbbb5e6244f9f&)
     4. Copy the token of your bot. You will need it for the next step. Head over to "General Information" tab and copy the application ID as well.
     5. Invite the bot to your discord server via this link (make sure you paste in your actual clientId instead of 12345)-> https://discord.com/api/oauth2/authorize?client_id=12345&permissions=0&scope=bot
-    6. Make a `config.json` file inside the repo.
+    1. Make a `config.json` file inside the `gothitelle-bot/` directory.
         ```json
         {
             "token": "pasteYourBotToken",
             "clientId": "pasteYourBotId"
         }
         ```
-    7. Enter `node deploy-commands.js` into cmd prompt. This will deploy the slash commands.
-    8. Run your discord bot via `node index.js`
--   ### Cmd Application
-    1. Enter `node download.js -h` to view syntax and then run your cmd line application accordingly.
+    2. Open your terminal in the `gothitelle-bot/` directory: `cd gothitelle-bot`
+    3. Install bot dependencies: `npm install`
+    4. Enter `node deploy-commands.js` to deploy slash commands.
+    5. Run your discord bot via `node index.js`
+- ### Cmd Application
+    1. From the project root, enter `node download.js -h` to view syntax.
 
 ## Usage
 
