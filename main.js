@@ -189,7 +189,7 @@ async function initializeBrowser(socket = null) {
       args: [
         `--window-size=1280,500`,
         `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-        // `--headless=new`,
+        `--headless=new`,
         // Platform Agnosticism: Force a 1.0 device scale factor so retina/4K monitors
         // don't secretly record at 2x or 3x resolution.
         `--force-device-scale-factor=1`,
@@ -278,7 +278,14 @@ io.on("connection", (socket) => {
       }
     } else {
       for (let rec of recordings)
-        await download(rec.link, rec.id, browser, config, emitLog, emitProgress); // record one by one
+        await download(
+          rec.link,
+          rec.id,
+          browser,
+          config,
+          emitLog,
+          emitProgress,
+        ); // record one by one
     }
 
     activeRecordings -= recordings.length;
