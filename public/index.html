@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Showdown Replay Downloader</title>
+    <meta name="description" content="A professional tool to record and download Pokemon Showdown replays with high quality and custom options." />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css" />
+
+    <!-- Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body data-theme="dark">
+    <!-- Header -->
+    <header role="banner">
+        <div class="logo-container">
+            <img src="https://play.pokemonshowdown.com/sprites/ani/victini.gif" alt="Victini Mascot" class="mascot" aria-hidden="true" />
+            <h1>Showdown Replay Studio</h1>
+            <span class="app-badge" id="versionBadge">v1.1.0</span>
+        </div>
+        
+        <div class="header-status">
+            <a class="source-repo visible" id="sourceRepo" href="https://github.com/Intenzi/ShowdownReplayDownloader" target="_blank" aria-label="View source on GitHub">
+                <span>View Source</span>
+            </a>
+            
+            <a class="update-available" id="updateBanner" href="#" target="_blank" aria-label="Update available, click to view releases">
+                <span>Update Available</span>
+            </a>
+            
+            <div class="status-indicator" aria-live="polite">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Setup Overlay -->
+    <div id="setupOverlay" class="setup-overlay hidden" role="dialog" aria-labelledby="setupTitle">
+        <div class="setup-card">
+            <h2 id="setupTitle" class="ws-title">Initial Setup Required</h2>
+            <p class="rec-subtitle">We need to download a headless Chromium browser and verify your environment. This happens once.</p>
+
+            <div class="setup-steps" role="list">
+                <div class="step-item" id="step1" role="listitem">
+                    <div class="step-number">1</div>
+                    <span>Chromium Browser</span>
+                </div>
+                <div class="step-item" id="step2" role="listitem">
+                    <div class="step-number">2</div>
+                    <span>FFmpeg (Bundled)</span>
+                </div>
+                <div class="step-item done" id="step3" role="listitem">
+                    <div class="step-number">3</div>
+                    <span>Output Directory</span>
+                </div>
+            </div>
+
+            <button class="btn-primary" id="btnSetup" onclick="startSetup()">
+                <span>Initialize Downloader</span>
+            </button>
+            <div id="setupLog" class="rec-subtitle" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Sidebar -->
+        <aside class="sidebar" aria-label="Recording configuration">
+            <section class="field">
+                <span class="section-label">Replay URLs</span>
+                <textarea id="links"
+                          placeholder="Paste replay links here...&#10;One link per line or comma-separated"
+                          aria-label="Replay links input"></textarea>
+            </section>
+
+            <section class="field">
+                <span class="section-label">Output Location</span>
+                <div class="folder-action">
+                    <div id="folderPath" class="folder-path" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Loading...</div>
+                    <button class="btn-secondary" onclick="pickFolder()" aria-label="Browse for output folder">Browse</button>
+                </div>
+                <div style="margin-top: 8px;">
+                    <button class="btn-secondary" style="width: 100%;" onclick="openOutputFolder()" id="btnOpenFolder">Open Recording Folder</button>
+                </div>
+            </section>
+
+            <section class="form-grid">
+                <div class="field">
+                    <label for="speed">Playback Speed</label>
+                    <select id="speed" aria-label="Playback speed">
+                        <option value="hyperfast">Hyperfast</option>
+                        <option value="fast">Fast</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="slow">Slow</option>
+                        <option value="really slow">Really Slow</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="theme">Visual Theme</label>
+                    <select id="theme" aria-label="UI Theme">
+                        <option value="auto" selected>Auto</option>
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                    </select>
+                </div>
+            </section>
+
+            <section class="field">
+                <label for="bulk">Bulk Processing</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="bulk" value="all" placeholder="# or all" aria-label="Bulk processing count or all" />
+                </div>
+                <small style="color: var(--text-dim); font-size: 0.75rem;">Number of parallel recordings or "all".</small>
+            </section>
+
+            <section class="field">
+                <span class="section-label">Preferences</span>
+                <div class="toggle-group">
+                    <label class="toggle-item" id="chip-nomusic" onclick="toggleOption('nomusic')">
+                        <input type="checkbox" id="nomusic" />
+                        <div class="toggle-circle"></div>
+                        <span>No Music</span>
+                    </label>
+                    <label class="toggle-item" id="chip-noaudio" onclick="toggleOption('noaudio')">
+                        <input type="checkbox" id="noaudio" />
+                        <div class="toggle-circle"></div>
+                        <span>No Audio</span>
+                    </label>
+                    <label class="toggle-item active" id="chip-nochat" onclick="toggleOption('nochat')">
+                        <input type="checkbox" id="nochat" checked />
+                        <div class="toggle-circle"></div>
+                        <span>Hide Chat</span>
+                    </label>
+                </div>
+            </section>
+
+            <div style="margin-top: auto;">
+                <button class="btn-primary" id="btnRecord" onclick="startRecording()">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <circle cx="8" cy="8" r="6"/>
+                    </svg>
+                    <span>Start Recording</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Workspace (Recording Queue) -->
+        <section class="workspace" aria-labelledby="workspaceTitle">
+            <div class="ws-header">
+                <h2 id="workspaceTitle" class="ws-title">Recording Overview</h2>
+                <div class="ws-actions">
+                    <button class="btn-secondary" onclick="clearAll()" id="btnClearAll">Clear All</button>
+                    <button class="btn-secondary" id="themeToggle" onclick="toggleDarkTheme()" title="Toggle Dark/Light Mode">Theme</button>
+                </div>
+            </div>
+
+            <div id="recordingList" class="recording-list">
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState">
+                    <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v20M2 12h20" />
+                    </svg>
+                    <p>No active recordings. Paste some links and hit "Start Recording" to begin.</p>
+                </div>
+            </div>
+        </section>
+    </main>    <script src="client.js"></script>
+</body>
+</html>
+
+</html>
