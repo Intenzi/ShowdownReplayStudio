@@ -8,7 +8,9 @@ const open = require("open");
 const { download } = require("./recorder");
 const { launch } = require("puppeteer-stream");
 
-// ── Config (persists across exe updates in OS app data folder) ──────────────
+const { execSync } = require("child_process");
+
+// Config Management (persists across app updates in OS app data folder)
 const CONFIG_DIR = path.join(os.homedir(), ".showdown-recorder");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
@@ -39,7 +41,7 @@ function saveConfig(config) {
   }
 }
 
-// ── Version check via GitHub Releases ───────────────────────────────────────
+// Version Check via GitHub Releases
 const CURRENT_VERSION = require("./package.json").version;
 const GITHUB_REPO = "Intenzi/ShowdownReplayDownloader";
 
@@ -58,7 +60,7 @@ async function checkForUpdates() {
   return null;
 }
 
-// ── Express + Socket.io setup ────────────────────────────────────────────────
+// Express + Socket.io Setup
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -70,7 +72,7 @@ let browser = null;
 let isRecording = false;
 let config = loadConfig();
 
-// ── Routes ───────────────────────────────────────────────────────────────────
+// API Routes
 app.get("/api/config", (req, res) => {
   res.json(config);
 });
@@ -95,7 +97,6 @@ app.post("/api/pick-folder", async (req, res) => {
   // On Windows/Mac/Linux we can spawn a dialog via PowerShell / osascript / zenity
   // Falls back to manual text entry if unavailable
   try {
-    const { execSync } = require("child_process");
     let folder = null;
 
     if (process.platform === "win32") {
@@ -127,7 +128,7 @@ app.post("/api/pick-folder", async (req, res) => {
   }
 });
 
-// ── Socket.io — setup + record flow ─────────────────────────────────────────
+// Socket.io - Setup & Recording Flow
 io.on("connection", (socket) => {
   socket.emit("status", { ready: browser !== null, recording: isRecording });
 
@@ -212,9 +213,9 @@ io.on("connection", (socket) => {
       if (bulk === "all") {
         toRecord.push(links);
       } else {
-        // chunk the links into smaller lists of size -> bulk
+        // Chunk the links into smaller lists based on bulk size
         for (let i = 0; i < links.length; i += bulk) {
-          toRecord.push(links.slice(i, i + bulk)); // fixed: was toRecord.push() with no argument
+          toRecord.push(links.slice(i, i + bulk));
         }
       }
 
@@ -236,7 +237,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
+// Application Boot
 const PORT = 57335; // unlikely to clash with anything
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`Showdown Recorder running at http://localhost:${PORT}`);
