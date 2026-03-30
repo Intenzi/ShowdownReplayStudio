@@ -4,3 +4,8 @@ node_modules/
 replays/
 
 config.json
+
+dist/
+.DS_Store
+Archive.zip
+
