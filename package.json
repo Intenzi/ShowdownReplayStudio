@@ -3,18 +3,22 @@
   "version": "1.1.0",
   "description": "Professional tool to record and download Pokemon Showdown replays.",
   "main": "main.js",
+  "bin": "main.js",
   "scripts": {
     "start": "node main.js",
+    "pkg": "pkg . --public",
     "build:win": "pkg . --targets node18-win-x64 --output dist/showdown-studio-win.exe --compress GZip",
     "build:mac": "pkg . --targets node18-mac-x64 --output dist/showdown-studio-mac --compress GZip",
+    "bundle:mac": "node scripts/bundle_mac.js",
+    "package:mac": "npm run build:mac && npm run bundle:mac",
     "build:linux": "pkg . --targets node18-linux-x64 --output dist/showdown-studio-linux --compress GZip",
-    "build:all": "mkdir -p dist && npm run build:win && npm run build:mac && npm run build:linux"
+    "build:all": "mkdir -p dist && npm run build:win && npm run build:mac && npm run bundle:mac && npm run build:linux"
   },
   "pkg": {
     "assets": [
       "public/**/*",
-      "node_modules/ffmpeg-static/ffmpeg*",
-      "node_modules/puppeteer/.local-chromium/**/*"
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/puppeteer-stream/extension/**/*"
     ],
     "scripts": [],
     "outputPath": "dist"
