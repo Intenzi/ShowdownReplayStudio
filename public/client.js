@@ -253,7 +253,8 @@ function updateRecordingItem(id, state, meta = {}) {
     turnsLabel.textContent = `Turns: ${current}/${meta.totalTurns}`;
   }
   if (meta.speed && speedLabel) {
-    const capitalized = meta.speed.charAt(0).toUpperCase() + meta.speed.slice(1);
+    const capitalized =
+      meta.speed.charAt(0).toUpperCase() + meta.speed.slice(1);
     speedLabel.textContent = `Speed: ${capitalized}`;
   }
 
@@ -349,9 +350,80 @@ function toggleDarkTheme() {
     target === "dark" ? "Theme (Dark)" : "Theme (Light)";
 }
 
+let lastFocusedElement = null;
+
 function viewRecording(filename) {
-  fetch(`/api/open-video/${filename}`);
+  const modal = document.getElementById("videoModal");
+  const video = document.getElementById("videoPlayer");
+  const container = document.getElementById("modalContainer");
+
+  lastFocusedElement = document.activeElement;
+
+  video.src = `/videos/${filename}`;
+  modal.classList.remove("hidden");
+
+  // Accessibility: Focus modal
+  container.focus();
+
+  // Scroll to top of modal just in case
+  container.scrollTop = 0;
 }
+
+function closeVideoModal() {
+  const modal = document.getElementById("videoModal");
+  const video = document.getElementById("videoPlayer");
+
+  modal.classList.add("hidden");
+  video.pause();
+  video.src = "";
+
+  // Return focus
+  if (lastFocusedElement) {
+    lastFocusedElement.focus();
+  }
+}
+
+// Global modal event listeners
+document.addEventListener("DOMContentLoaded", () => {
+  const modal = document.getElementById("videoModal");
+  const closeBtn = document.getElementById("btnCloseModal");
+
+  closeBtn.addEventListener("click", closeVideoModal);
+
+  // Close on backdrop click
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeVideoModal();
+  });
+
+  // Close on Escape & Tab Trap
+  document.addEventListener("keydown", (e) => {
+    if (modal.classList.contains("hidden")) return;
+
+    if (e.key === "Escape") {
+      closeVideoModal();
+    }
+
+    if (e.key === "Tab") {
+      const focusableSelectors =
+        'button, [tabindex]:not([tabindex="-1"]), video';
+      const focusableElements = modal.querySelectorAll(focusableSelectors);
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          lastElement.focus();
+          e.preventDefault();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          firstElement.focus();
+          e.preventDefault();
+        }
+      }
+    }
+  });
+});
 
 async function editRecordingName(id, oldFilename) {
   const newName = prompt(
