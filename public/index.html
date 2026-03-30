@@ -60,15 +60,19 @@
             <div class="setup-steps" role="list">
                 <div class="step-item" id="step1" role="listitem">
                     <div class="step-number">1</div>
-                    <span>Chromium Browser</span>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                        <span style="font-size: 0.9rem;">Output Directory</span>
+                        <div id="setupFolderPath" style="font-size: 0.7rem; color: var(--text-dim); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;">~/showdown-replays</div>
+                    </div>
+                    <button class="btn-rec-action primary" style="padding: 6px 12px; font-size: 0.75rem; border-radius: 6px;" onclick="pickFolder('setup')">Change Directory</button>
                 </div>
                 <div class="step-item" id="step2" role="listitem">
                     <div class="step-number">2</div>
-                    <span>FFmpeg (Bundled)</span>
+                    <span>Chromium Browser</span>
                 </div>
-                <div class="step-item done" id="step3" role="listitem">
+                <div class="step-item" id="step3" role="listitem">
                     <div class="step-number">3</div>
-                    <span>Output Directory</span>
+                    <span>FFmpeg (Bundled)</span>
                 </div>
             </div>
 

@@ -55,12 +55,15 @@ function applyConfig(cfg) {
   const theme = document.getElementById("theme");
   const bulk = document.getElementById("bulk");
   const folderPath = document.getElementById("folderPath");
+  const setupFolderPath = document.getElementById("setupFolderPath");
 
   if (speed) speed.value = cfg.speed;
   if (theme) theme.value = cfg.theme;
   if (bulk) bulk.value = cfg.bulk;
   if (folderPath)
     folderPath.textContent = cfg.outputFolder || "No folder selected";
+  if (setupFolderPath)
+    setupFolderPath.textContent = cfg.outputFolder || "No folder selected";
 
   // Toggles
   ["nomusic", "noaudio", "nochat"].forEach((id) => {
@@ -134,12 +137,15 @@ function updateConfig() {
   });
 }
 
-async function pickFolder() {
+async function pickFolder(context = "sidebar") {
   const res = await fetch("/api/pick-folder", { method: "POST" });
   const data = await res.json();
   if (data.folder) {
+    config.outputFolder = data.folder;
     const pathDisplay = document.getElementById("folderPath");
+    const setupPathDisplay = document.getElementById("setupFolderPath");
     if (pathDisplay) pathDisplay.textContent = data.folder;
+    if (setupPathDisplay) setupPathDisplay.textContent = data.folder;
   }
 }
 
@@ -173,12 +179,43 @@ async function quitApp() {
 
 function startSetup() {
   const btn = document.getElementById("btnSetup");
+  const setupLog = document.getElementById("setupLog");
   if (btn) btn.disabled = true;
 
-  const step1 = document.getElementById("step1");
-  if (step1) step1.classList.add("active");
+  const steps = ["step1", "step2", "step3"];
+  let currentStep = 0;
 
-  socket.emit("setup");
+  const processStep = () => {
+    if (currentStep >= steps.length) {
+      if (setupLog) setupLog.textContent = "Finalizing configuration...";
+      socket.emit("setup");
+      return;
+    }
+
+    const stepId = steps[currentStep];
+    const el = document.getElementById(stepId);
+    if (el) el.classList.add("active");
+
+    if (setupLog) {
+      const labels = [
+        "Validating output directory...",
+        "Verifying Chromium instance...",
+        "Checking FFmpeg binaries...",
+      ];
+      setupLog.textContent = labels[currentStep];
+    }
+
+    setTimeout(() => {
+      if (el) {
+        el.classList.remove("active");
+        el.classList.add("done");
+      }
+      currentStep++;
+      processStep();
+    }, 800 + Math.random() * 700);
+  };
+
+  processStep();
 }
 
 function startRecording() {
