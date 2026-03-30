@@ -147,6 +147,30 @@ function openOutputFolder() {
   fetch("/api/open-folder", { method: "POST" });
 }
 
+async function quitApp() {
+  if (confirm("Are you sure you want to quit Showdown Replay Studio? This will stop all active and queued recordings.")) {
+    const btn = document.getElementById("btnQuit");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Shutting down...";
+    }
+    
+    try {
+      await fetch("/api/quit", { method: "POST" });
+      document.body.innerHTML = `
+        <div style="height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #0f1115; color: #f8fafc; font-family: sans-serif; text-align: center; padding: 20px;">
+          <h1 style="color: #ff7e4d; margin-bottom: 20px;">App Shutdown</h1>
+          <p>The Showdown Replay Studio background service has been stopped.</p>
+          <p style="margin-top: 10px; color: #94a3b8;">You can now close this browser tab.</p>
+        </div>
+      `;
+    } catch {
+      // If server dies before response, just show the message
+      window.close();
+    }
+  }
+}
+
 function startSetup() {
   const btn = document.getElementById("btnSetup");
   if (btn) btn.disabled = true;

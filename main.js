@@ -281,6 +281,14 @@ app.post("/api/pick-folder", async (req, res) => {
   }
 });
 
+app.post("/api/quit", (req, res) => {
+  res.json({ ok: true });
+  setTimeout(() => {
+    console.log("[System] Shutting down application...");
+    process.exit(0);
+  }, 500);
+});
+
 /**
  * SOCKET.IO COMMUNICATION
  */
