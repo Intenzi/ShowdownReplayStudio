@@ -61,7 +61,26 @@ if (os.platform() !== "win32") {
 /**
  * CONFIGURATION PERSISTENCE
  */
-const CONFIG_DIR = process.pkg ? path.dirname(process.execPath) : process.cwd();
+function getConfigDir() {
+  const appName = "ShowdownReplayStudio";
+  let baseDir;
+
+  if (process.platform === "win32") {
+    baseDir = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  } else if (process.platform === "darwin") {
+    baseDir = path.join(os.homedir(), "Library", "Application Support");
+  } else {
+    baseDir = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  }
+
+  const finalDir = path.join(baseDir, appName);
+  if (!fs.existsSync(finalDir)) {
+    fs.mkdirSync(finalDir, { recursive: true });
+  }
+  return finalDir;
+}
+
+const CONFIG_DIR = getConfigDir();
 const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 const DEFAULT_CONFIG = {
   outputFolder: path.join(os.homedir(), "showdown-replays"),
@@ -219,7 +238,10 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
-app.get("/api/status", (req, res) => res.json({ ready: true, recording: activeRecordings > 0 }));
+app.get("/api/status", (req, res) => {
+  const isReady = fs.existsSync(CONFIG_PATH);
+  res.json({ ready: isReady, recording: activeRecordings > 0 });
+});
 
 // API: File Management
 app.get("/api/open-video/:filename", (req, res) => {
@@ -273,7 +295,7 @@ app.post("/api/pick-folder", async (req, res) => {
 
     if (folder) {
       config.outputFolder = folder;
-      saveConfig(config);
+      // Note: We don't save immediately here to allow 'setup' to handle the final save
       res.json({ folder });
     } else {
       res.json({ folder: null });
@@ -295,7 +317,15 @@ app.post("/api/quit", (req, res) => {
  * SOCKET.IO COMMUNICATION
  */
 io.on("connection", (socket) => {
-  socket.emit("status", { ready: true, recording: activeRecordings > 0 });
+  const isReady = fs.existsSync(CONFIG_PATH);
+  socket.emit("status", { ready: isReady, recording: activeRecordings > 0 });
+
+  socket.on("setup", () => {
+    console.log("[Setup] Finalizing first-time configuration...");
+    saveConfig(config); // This creates the config.json file
+    socket.emit("setup-done");
+    io.emit("status", { ready: true, recording: activeRecordings > 0 });
+  });
 
   socket.on("record", async ({ recordings, recordConfig }) => {
     config = { ...config, ...recordConfig };
