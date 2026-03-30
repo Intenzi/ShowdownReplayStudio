@@ -72,6 +72,8 @@ if (fs.existsSync(extensionSrc)) {
 if (fs.existsSync(chromiumSrc)) {
   console.log("🌐 Bundling local Chromium instance...");
   try {
+    // Note: use -p to ensure it's copied INTO chromium folder if desired, 
+    // but here we copy the chromium folder itself into MacOS/
     execSync(`cp -R "${chromiumSrc}" "${MAC_OS_DIR}/"`);
   } catch (e) {
     console.error("❌ Failed to bundle Chromium:", e.message);
@@ -86,7 +88,9 @@ if (fs.existsSync(chromiumSrc)) {
       if (parts.length > 1) {
         const appRoot = parts[0] + ".app";
         console.log(`🚀 Found Puppeteer browser: ${appRoot}`);
-        execSync(`cp -R "${appRoot}" "${path.join(MAC_OS_DIR, "chromium")}/"`);
+        const dest = path.join(MAC_OS_DIR, "chromium");
+        if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+        execSync(`cp -R "${appRoot}" "${dest}/"`);
       }
     }
   } catch (err) {
