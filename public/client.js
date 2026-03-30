@@ -1,4 +1,4 @@
-const socket = io();
+const socket = (typeof io !== 'undefined') ? io() : { on: () => {}, emit: () => {} };
 let config = {};
 let setupDone = false;
 let isRecording = false;
@@ -457,7 +457,8 @@ function closeVideoModal() {
 
   modal.classList.add("hidden");
   video.pause();
-  video.src = "";
+  video.removeAttribute("src");
+  video.load();
 
   // Return focus
   if (lastFocusedElement) {
