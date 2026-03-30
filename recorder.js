@@ -65,6 +65,7 @@ async function waitUntilVictory(timeout, page, onProgress) {
  */
 async function download(link, id, browser, config, emitLog, emitProgress) {
   const { nochat, nomusic, noaudio, theme, speed, outputFolder } = config;
+  let playersLabel = "Unknown Replay";
   const fileId = generateFileId();
   const tempPath = path.join(outputFolder, `replay-${fileId}-temp.webm`);
   const finalPath = path.join(outputFolder, `replay-${fileId}.webm`);
@@ -89,7 +90,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     const data = await response.json();
     const matches = Array.from(data.log.matchAll(/\n\|turn\|(\d+)\n/g));
     const totalTurns = matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
-    const playersLabel = data.players ? data.players.join(" vs ") : "Unknown Battle";
+    playersLabel = data ? (data.players ? data.players.join(" vs ") : "Unknown Battle") : "Unknown Replay";
 
     fs.mkdirSync(outputFolder, { recursive: true });
 
