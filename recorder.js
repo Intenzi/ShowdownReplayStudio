@@ -77,11 +77,15 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
       path.join(outputFolder, `replay-${fileId}-temp.webm`),
     );
     const page = await browser.newPage();
+
+    // Set viewport explicitly to match intended recording dimensions
+    // This prevents the default 800x600 viewport from clipping the chat
     await page.setViewport({
       width: nochat ? 642 : 1100,
       height: 362,
       deviceScaleFactor: 1,
     });
+
     await page.goto(link, { waitUntil: "load" });
 
     await page.addStyleTag({
@@ -170,7 +174,8 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
     stream.destroy();
-    file.close();
+    file.end();
+    await new Promise((resolve) => file.on("finish", resolve));
 
     const fixMsg = `🎬 Fixing metadata for ${playersLabel}...`;
     if (emitLog) emitLog(fixMsg, "info");

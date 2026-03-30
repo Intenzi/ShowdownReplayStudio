@@ -1,79 +1,151 @@
-const express = require("express");
-const fs = require("fs");
-const path = require("path");
-const os = require("os");
-const { Server } = require("socket.io");
-const http = require("http");
-const open = require("open");
-const { download } = require("./recorder");
 const { launch } = require("puppeteer-stream");
-
+const { download } = require("./recorder");
+const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
+const path = require("path");
+const fs = require("fs");
 const { execSync } = require("child_process");
+const open = require("open");
 
-// Config Management (persists across app updates in OS app data folder)
-const CONFIG_DIR = path.join(os.homedir(), ".showdown-recorder");
-const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
-
-function loadConfig() {
-  const defaults = {
-    outputFolder: path.join(os.homedir(), "showdown-replays"),
-    speed: "normal",
-    theme: "auto",
-    nomusic: false,
-    noaudio: false,
-    nochat: false,
-    bulk: 2,
-  };
-
-  try {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    if (fs.existsSync(CONFIG_FILE)) {
-      const saved = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")) || {};
-      return { ...defaults, ...saved };
-    }
-  } catch {}
-  return defaults;
-}
-
-function saveConfig(config) {
-  try {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
-  } catch (err) {
-    console.error("Failed to save config:", err);
-  }
-}
-
-// Version Check via GitHub Releases
-const CURRENT_VERSION = require("./package.json").version;
+// Versioning and Updates
+const CURRENT_VERSION = "1.1.0";
 const GITHUB_REPO = "Intenzi/ShowdownReplayDownloader";
 
 async function checkForUpdates() {
   try {
-    const res = await fetch(
+    const response = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
     );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const latest = data.tag_name.replace(/^v/, "");
-    if (latest !== CURRENT_VERSION) {
-      return { version: latest, url: data.html_url };
-    }
-  } catch {}
-  return null;
+    const data = await response.json();
+    return data.tag_name !== `v${CURRENT_VERSION}` ? data.tag_name : null;
+  } catch {
+    return null;
+  }
 }
 
-// Express + Socket.io Setup
+// Config Persistence
+const CONFIG_PATH = path.join(process.cwd(), "config.json");
+const DEFAULT_CONFIG = {
+  outputFolder: path.join(require("os").homedir(), "showdown-replays"),
+  nochat: true,
+  nomusic: false,
+  noaudio: false,
+  theme: "auto",
+  speed: "normal",
+  bulk: 1, // Default to 1 for stability
+};
+
+function loadConfig() {
+  if (fs.existsSync(CONFIG_PATH)) {
+    return { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(CONFIG_PATH)) };
+  }
+  return DEFAULT_CONFIG;
+}
+
+function saveConfig(cfg) {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
+// GUI Server Setup
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+app.use("/videos", express.static(loadConfig().outputFolder));
 
-let browser = null;
 let activeRecordings = 0;
 let config = loadConfig();
+
+// Browser Persistence Layer
+let browsers = {
+  nochat: null,
+  chat: null,
+};
+
+async function launchOptimizedBrowser(width, height) {
+  return await launch({
+    executablePath: require("puppeteer").executablePath(),
+    ignoreDefaultArgs: ["--enable-automation"],
+    args: [
+      `--window-size=${width},${height}`,
+      `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
+      `--headless=new`,
+      `--force-device-scale-factor=1`,
+      `--hide-scrollbars`,
+      `--disable-notifications`,
+      `--disable-infobars`,
+    ],
+  });
+}
+
+// Global Singleton Rolling Queue System
+let globalQueue = [];
+let isProcessing = false;
+let concurrentCount = 0;
+
+async function triggerNext() {
+  // If we are already at capacity or queue is empty, do nothing
+  if (
+    concurrentCount >= (parseInt(config.bulk) || 1) ||
+    globalQueue.length === 0
+  ) {
+    return;
+  }
+
+  const rec = globalQueue.shift();
+  concurrentCount++;
+  activeRecordings++;
+  io.emit("status", { ready: true, recording: true });
+
+  const emitLog = (msg, type = "info") => io.emit("log", { msg, type });
+  const emitProgress = (id, link, state, meta = {}) =>
+    io.emit("progress", { id, link, state, ...meta });
+
+  runRecording(rec, emitLog, emitProgress);
+
+  // Attempt to start another one immediately if bulk capacity allows
+  triggerNext();
+}
+
+async function runRecording(rec, emitLog, emitProgress) {
+  try {
+    const type = config.nochat ? "nochat" : "chat";
+
+    // Safety check: if browser crashed, restart it
+    if (!browsers[type] || !browsers[type].isConnected()) {
+      emitLog(`Refreshing ${type} browser context...`, "info");
+      browsers[type] = await launchOptimizedBrowser(
+        config.nochat ? 642 : 1100,
+        450,
+      );
+    }
+
+    await download(
+      rec.link,
+      rec.id,
+      browsers[type],
+      config,
+      emitLog,
+      emitProgress,
+    );
+  } catch (err) {
+    emitLog(`❌ Recording error: ${err.message}`, "error");
+  } finally {
+    concurrentCount--;
+    activeRecordings--;
+    io.emit("status", { ready: true, recording: activeRecordings > 0 });
+
+    if (activeRecordings === 0 && globalQueue.length === 0) {
+      emitLog("🏁 All queued processes complete!", "success");
+    }
+
+    // Trigger next item in queue immediately
+    triggerNext();
+  }
+}
 
 // API Routes
 app.get("/api/config", (req, res) => {
@@ -92,7 +164,7 @@ app.get("/api/version", async (req, res) => {
 });
 
 app.get("/api/status", (req, res) => {
-  res.json({ ready: browser !== null, recording: activeRecordings > 0 });
+  res.json({ ready: true, recording: activeRecordings > 0 });
 });
 
 app.get("/api/open-video/:filename", (req, res) => {
@@ -168,153 +240,34 @@ app.post("/api/pick-folder", async (req, res) => {
   }
 });
 
-async function initializeBrowser(socket = null) {
-  if (browser) return;
-
-  const emitLog = (msg, type) => {
-    if (socket) socket.emit("log", { msg, type });
-    else io.emit("log", { msg, type });
-  };
-
-  emitLog("Launching browser...", "info");
-
-  try {
-    browser = await launch({
-      executablePath: require("puppeteer").executablePath(),
-      // Setting defaultViewport to null tells Puppeteer to use the launched window size
-      // instead of forcing it to match the requested viewport dimensions.
-      defaultViewport: null,
-      // This completely disables the "Chrome is being controlled by automated test software" infobar!
-      ignoreDefaultArgs: ["--enable-automation"],
-      args: [
-        `--window-size=1280,500`,
-        `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-        `--headless=new`,
-        // Platform Agnosticism: Force a 1.0 device scale factor so retina/4K monitors
-        // don't secretly record at 2x or 3x resolution.
-        `--force-device-scale-factor=1`,
-        // Platform Agnosticism: Hide scrollbars so they don't eat into the right-side pixels
-        `--hide-scrollbars`,
-        // Disable default browser popups/prompts to prevent viewport shifting
-        `--disable-notifications`,
-        `--disable-infobars`,
-      ],
-    });
-    emitLog("✅ Browser ready!", "success");
-    if (socket) socket.emit("setup-done");
-    else io.emit("setup-done");
-    io.emit("status", { ready: true, recording: false });
-  } catch (err) {
-    emitLog(`❌ Browser setup failed: ${err}`, "error");
-    throw err;
-  }
-}
-
-// Socket.io - Setup & Recording Flow
 io.on("connection", (socket) => {
   socket.emit("status", {
-    ready: browser !== null,
+    ready: true,
     recording: activeRecordings > 0,
   });
 
-  socket.on("setup", async () => {
-    try {
-      await initializeBrowser(socket);
-    } catch {}
-  });
-
   socket.on("record", async ({ recordings, recordConfig }) => {
-    // Merge in any config overrides sent from the UI and persist
-    if (!browser) {
-      socket.emit("log", {
-        msg: "Browser not ready. Please wait for setup.",
-        type: "error",
-      });
-      return;
-    }
-
-    // merge in any config overrides sent from the UI and persist
     config = { ...config, ...recordConfig };
     saveConfig(config);
 
-    // Bulk mode allows recording multiple replays in parallel (only recommended for strong CPUs)
-    let bulk = config.bulk;
-
-    if (parseInt(bulk) && bulk >= 1) {
-      bulk = parseInt(bulk);
-      if (bulk > recordings.length) bulk = recordings.length;
-    } else if (bulk !== "all") {
-      socket.emit("log", {
-        msg: `Invalid bulk value: "${bulk}"`,
-        type: "error",
-      });
-      return;
-    }
-
-    activeRecordings += recordings.length;
-    io.emit("status", { ready: true, recording: true });
-
-    const emitLog = (msg, type = "info") => io.emit("log", { msg, type });
-    const emitProgress = (id, link, state, meta = {}) =>
-      io.emit("progress", { id, link, state, ...meta });
-
-    const toRecord = [];
-    if (recordings.length > 1 && (bulk === "all" || bulk > 1)) {
-      if (bulk === "all") {
-        toRecord.push(recordings);
-      } else {
-        // Chunk the recordings into smaller lists based on bulk size
-        for (let i = 0; i < recordings.length; i += bulk) {
-          toRecord.push(recordings.slice(i, i + bulk));
-        }
-      }
-
-      for (let batch of toRecord) {
-        await Promise.all(
-          batch.map((rec) =>
-            download(rec.link, rec.id, browser, config, emitLog, emitProgress),
-          ),
-        );
-      }
-    } else {
-      for (let rec of recordings)
-        await download(
-          rec.link,
-          rec.id,
-          browser,
-          config,
-          emitLog,
-          emitProgress,
-        ); // record one by one
-    }
-
-    activeRecordings -= recordings.length;
-    io.emit("status", { ready: true, recording: activeRecordings > 0 });
-    emitLog("🏁 All recordings complete!", "success");
+    globalQueue.push(...recordings);
+    triggerNext();
   });
 });
 
-// Application Boot
-const PORT = 57335; // unlikely to clash with anything
-server.listen(PORT, "127.0.0.1", async () => {
+const PORT = process.env.PORT || 57335;
+server.listen(PORT, async () => {
   console.log(`Showdown Recorder running at http://localhost:${PORT}`);
-  open(`http://localhost:${PORT}`); // auto-open browser tab
 
-  // Check if browser is already "downloaded" (exists) and auto-launch if so
+  // Pre-launch the two optimized browsers on startup
   try {
-    const exePath = require("puppeteer").executablePath();
-    if (fs.existsSync(exePath)) {
-      await initializeBrowser();
-    }
+    console.log("Initializing recording browsers...");
+    browsers.nochat = await launchOptimizedBrowser(642, 450); // self adjusted value from 362 + 88 where 88 is the extra height of chrome's tab bar
+    browsers.chat = await launchOptimizedBrowser(1100, 450);
+    console.log("✅ Browsers ready.");
   } catch (err) {
-    console.error("Auto-launch failed:", err);
+    console.error("❌ Failed to initialize browsers:", err);
   }
-});
 
-// Cleanup on exit
-process.on("SIGINT", async () => {
-  try {
-    if (browser) await browser.close();
-  } catch {}
-  process.exit();
+  await open(`http://localhost:${PORT}`);
 });
