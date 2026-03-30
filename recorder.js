@@ -2,6 +2,7 @@ const { getStream } = require("puppeteer-stream");
 const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 /**
  * UTILITIES
@@ -14,20 +15,52 @@ const generateFileId = () =>
  * FFmpeg CONFIGURATION
  */
 function getFfmpegPath() {
-  if (process.pkg) {
-    // In bundled macOS apps, binaries must sit on the real disk (Contents/MacOS/)
-    const bundledPath = path.join(path.dirname(process.execPath), "ffmpeg");
-    if (fs.existsSync(bundledPath)) return bundledPath;
-  }
+  let resPath = "ffmpeg";
+  const { execSync } = require("child_process");
+
+  console.log(`[System] Resolving FFmpeg. Platform: ${os.platform()}`);
+
+  // 1. Try system PATH first (most reliable for Windows users who have it installed)
   try {
-    return require("ffmpeg-static");
-  } catch (err) {
-    console.error("[System] FFmpeg static binary not found.");
-    return "ffmpeg"; // Fallback to system PATH
+    execSync("ffmpeg -version", { stdio: "ignore" });
+    console.log("[System] Found working system-wide FFmpeg.");
+    return "ffmpeg";
+  } catch (e) {
+    console.log("[System] System-wide FFmpeg not found on PATH.");
   }
+
+  // 2. Try bundled/pkg path
+  if (process.pkg) {
+    resPath = path.join(path.dirname(process.execPath), "ffmpeg");
+    if (os.platform() === "win32") resPath += ".exe";
+  } else {
+    // 3. Try npm-installed ffmpeg-static
+    try {
+      resPath = require("ffmpeg-static");
+      console.log(`[System] ffmpeg-static returned: ${resPath}`);
+    } catch (err) {
+      console.warn("[System] ffmpeg-static require failed.");
+      resPath = "ffmpeg";
+    }
+  }
+
+  // Final validation and normalization for Windows
+  if (path.isAbsolute(resPath)) {
+    if (!fs.existsSync(resPath)) {
+      console.warn(`[System] Warning: Path does not exist: ${resPath}.`);
+      resPath = "ffmpeg";
+    } else {
+      // Very Important for Windows: Ensure paths are correctly escaped/quoted later
+      resPath = path.resolve(resPath);
+    }
+  }
+
+  console.log(`[System] Final FFmpeg binary path: ${resPath}`);
+  return resPath;
 }
 
-ffmpeg.setFfmpegPath(getFfmpegPath());
+const ffmpegPath = getFfmpegPath();
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 /**
  * BROWSER LOGIC: Turn Detection & Victory State
@@ -169,6 +202,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     // 8. Fix WebM Metadata (FFmpeg)
     emitLog?.(`🎬 Finalizing metadata: ${playersLabel}...`, "info");
     emitProgress?.(id, link, "finalizing", { players: playersLabel });
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Delay for file handle release on Windows
     await fixWebmMetadata(tempPath, finalPath);
 
     emitLog?.(`✅ Saved: replay-${fileId}.webm`, "success");
@@ -189,16 +223,44 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
  * FFmpeg: Metadata Repair
  */
 async function fixWebmMetadata(input, output) {
+  // Pre-check if FFmpeg actually works to avoid background crashes in fluent-ffmpeg
+  try {
+    const { execSync } = require("child_process");
+    execSync(`"${ffmpegPath}" -version`, { stdio: "ignore" });
+  } catch (err) {
+    console.error(`[FFmpeg] Pre-check failed for binary: ${ffmpegPath}. Skipping metadata repair.`);
+    console.error("[FFmpeg] The recording will still be saved but might have seek/duration issues in some players.");
+    fs.copyFileSync(input, output);
+    return;
+  }
+
   return new Promise((resolve, reject) => {
-    ffmpeg(input)
-      .withVideoCodec("copy")
-      .withAudioCodec("copy")
-      .output(output)
-      .on("end", resolve)
-      .on("error", (err, stdout, stderr) => {
-        reject(new Error(`FFmpeg processing failed: ${err.message}`));
-      })
-      .run();
+    try {
+      const command = ffmpeg(input)
+        .withVideoCodec("copy")
+        .withAudioCodec("copy")
+        .output(output)
+        .on("start", (cmd) => {
+          console.log(`[FFmpeg] Started command: ${cmd}`);
+        })
+        .on("end", () => {
+          console.log("[FFmpeg] Processing finished successfully.");
+          resolve();
+        })
+        .on("error", (err, stdout, stderr) => {
+          console.error("[FFmpeg] Error:", err.message);
+          console.error("[FFmpeg] Stderr:", stderr);
+          // If FFmpeg fails, we still want to "succeed" by just using the raw file
+          console.warn("[FFmpeg] Repair failed, using raw capture instead.");
+          try { fs.copyFileSync(input, output); resolve(); } catch (e) { reject(e); }
+        });
+      
+      command.run();
+    } catch (err) {
+      console.error("[FFmpeg] Synchronous error launching FFmpeg:", err.message);
+      // Fallback
+      try { fs.copyFileSync(input, output); resolve(); } catch (e) { reject(e); }
+    }
   });
 }
 
