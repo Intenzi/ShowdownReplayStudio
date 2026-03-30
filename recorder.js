@@ -173,9 +173,20 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     // Wait for 2 seconds so that the battle has completely ended as we read the text earlier than it getting fully animated
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
-    stream.destroy();
+    stream.unpipe(file);
     file.end();
     await new Promise((resolve) => file.on("finish", resolve));
+    stream.destroy();
+
+    // Check if recorded file actually has data before trying to fix it
+    const tempPath = path.join(outputFolder, `replay-${fileId}-temp.webm`);
+    const stats = fs.statSync(tempPath);
+    if (stats.size < 1000) {
+      // 262 bytes is the typical 'empty' webm header
+      throw new Error(
+        `Recording empty (only ${stats.size} bytes). The browser extension may have failed to capture the page.`,
+      );
+    }
 
     const fixMsg = `🎬 Fixing metadata for ${playersLabel}...`;
     if (emitLog) emitLog(fixMsg, "info");
@@ -225,9 +236,10 @@ async function fixwebm(fileId, outputFolder) {
       .withAudioCodec("copy") // Copy the video and audio streams without re-encoding
       .output(path.join(outputFolder, `replay-${fileId}.webm`))
       .on("end", resolve)
-      .on("error", (err) => {
-        console.error("Error fixing metadata:", err);
-        reject(err);
+      .on("error", (err, stdout, stderr) => {
+        console.error("FFmpeg Error:", err.message);
+        console.error("FFmpeg stderr:", stderr);
+        reject(new Error(`FFmpeg failed: ${err.message}. Stderr: ${stderr}`));
       });
 
     command.run();
