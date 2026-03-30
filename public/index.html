@@ -17,8 +17,16 @@
     <!-- CSS -->
     <link rel="stylesheet" href="style.css" />
 
-    <!-- Socket.io -->
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Socket.io Error Handler (Must be before the script that uses it) -->
+    <script>
+        function handleSocketError() {
+            const statusText = document.getElementById("statusText");
+            if (statusText) statusText.textContent = "Offline (Error)";
+            console.error("Socket.io script failed to load. The server may not be reachable.");
+            alert("App initialization error: Could not reach the background service. Please ensure the app is running and restart it if needed.");
+        }
+    </script>
+    <script id="socketio-script" src="/socket.io.min.js" onerror="handleSocketError()"></script>
 </head>
 <body data-theme="dark">
     <!-- Header -->
@@ -194,7 +202,6 @@
             </div>
             <div class="modal-body">
                 <video id="videoPlayer" controls autoplay>
-                    <source src="" type="video/webm">
                     Your browser does not support the video tag.
                 </video>
             </div>
@@ -203,6 +210,4 @@
 
     <script src="client.js"></script>
 </body>
-</html>
-
 </html>
