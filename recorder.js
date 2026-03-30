@@ -1,85 +1,100 @@
 const { getStream } = require("puppeteer-stream");
 const ffmpeg = require("fluent-ffmpeg");
-const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
 const path = require("path");
 
-const generateRandom = () =>
+/**
+ * UTILITIES
+ */
+const generateFileId = () =>
   Math.random().toString(36).substring(2, 15) +
-  Math.random().toString(36).substring(2, 5); // simplistic simple https://stackoverflow.com/a/71262982/14393614
+  Math.random().toString(36).substring(2, 5);
 
-ffmpeg.setFfmpegPath(ffmpegPath); // bundled ffmpeg, no separate install needed
-
-async function waitUntilVictory(timeout, page, onProgress) {
-  // Safety timeout: stop the loop if the battle doesn't end within the specified time (e.g., page hang)
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    try {
-      // Direct extraction of the turn number from the field overlay (more efficient than scanning the log)
-      const turnNumber = await page.evaluate(() => {
-        const turnDiv = document.querySelector(".innerbattle .turn");
-        if (turnDiv) {
-          // Text is typically "Turn 1", "Turn 2", etc.
-          return parseInt(turnDiv.innerText.replace("Turn ", "")) || 0;
-        }
-        return 0;
-      });
-
-      const victory = await page.evaluate(() => {
-        const els = document.querySelectorAll("div.battle-history");
-        if (els.length === 0) return false;
-        const lastLog = els[els.length - 1].textContent;
-        return lastLog.endsWith(" won the battle!");
-      });
-
-      if (onProgress) onProgress(turnNumber);
-      if (victory) return;
-    } catch (err) {
-      console.error("Error in waitUntilVictory loop:", err);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+/**
+ * FFmpeg CONFIGURATION
+ */
+function getFfmpegPath() {
+  if (process.pkg) {
+    // In bundled macOS apps, binaries must sit on the real disk (Contents/MacOS/)
+    const bundledPath = path.join(path.dirname(process.execPath), "ffmpeg");
+    if (fs.existsSync(bundledPath)) return bundledPath;
+  }
+  try {
+    return require("ffmpeg-static");
+  } catch (err) {
+    console.error("[System] FFmpeg static binary not found.");
+    return "ffmpeg"; // Fallback to system PATH
   }
 }
 
+ffmpeg.setFfmpegPath(getFfmpegPath());
+
+/**
+ * BROWSER LOGIC: Turn Detection & Victory State
+ */
+async function waitUntilVictory(timeout, page, onProgress) {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeout) {
+    try {
+      // Extract current turn number
+      const turnNumber = await page.evaluate(`(() => {
+        const turnDiv = document.querySelector(".innerbattle .turn");
+        return turnDiv ? parseInt(turnDiv.innerText.replace("Turn ", "")) || 0 : 0;
+      })()`);
+
+      // Detect "won the battle!" message in the history
+      const victory = await page.evaluate(`(() => {
+        const logs = document.querySelectorAll("div.battle-history");
+        if (logs.length === 0) return false;
+        return logs[logs.length - 1].textContent.endsWith(" won the battle!");
+      })()`);
+
+      if (onProgress) onProgress(turnNumber);
+      if (victory) return true;
+    } catch (err) {
+      // Silent catch for intermittent browser evaluation errors during page loads
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return false; // Timeout reached
+}
+
+/**
+ * MAIN RECORDING PIPELINE
+ */
 async function download(link, id, browser, config, emitLog, emitProgress) {
   const { nochat, nomusic, noaudio, theme, speed, outputFolder } = config;
+  const fileId = generateFileId();
+  const tempPath = path.join(outputFolder, `replay-${fileId}-temp.webm`);
+  const finalPath = path.join(outputFolder, `replay-${fileId}.webm`);
 
-  if (
-    !(
-      link.startsWith("https://replay.pokemonshowdown.com/") ||
-      link.startsWith("http://replay.pokemonshowdown.com/")
-    ) &&
-    !(link.endsWith(".json") || link.endsWith(".log"))
-  ) {
-    if (emitLog) emitLog(`❌ Invalid link: ${link}`, "error");
-    else console.log(`Invalid link: ${link}`);
+  // 1. Validation
+  const isValidLink = (link.startsWith("https://replay.pokemonshowdown.com/") || 
+                     link.startsWith("http://replay.pokemonshowdown.com/")) ||
+                    (link.endsWith(".json") || link.endsWith(".log"));
+
+  if (!isValidLink) {
+    const errorMsg = `[Recorder] Invalid Showdown link: ${link}`;
+    emitLog?.(errorMsg, "error");
     return;
   }
-
-  const requestLink = link.split("?")[0]; // player viewpoint arg might exist
-  const response = await fetch(requestLink + ".json");
-  if (!response.ok) {
-    const errorMsg = `❌ Unable to fetch replay. Ensure ${requestLink} is a valid showdown replay.`;
-    if (emitLog) emitLog(errorMsg, "error");
-    else console.log(errorMsg);
-    return;
-  }
-
-  const data = await response.json();
-  const matches = Array.from(data.log.matchAll(/\n\|turn\|(\d+)\n/g));
-  const totalTurns =
-    matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
-  const fileId = generateRandom();
 
   try {
-    fs.mkdirSync(outputFolder, { recursive: true });
-    const file = fs.createWriteStream(
-      path.join(outputFolder, `replay-${fileId}-temp.webm`),
-    );
-    const page = await browser.newPage();
+    // 2. Fetch Metadata
+    const requestLink = link.split("?")[0].replace(/\/$/, "");
+    const response = await fetch(`${requestLink}.json`);
+    if (!response.ok) throw new Error(`Could not fetch replay data from ${requestLink}.json`);
 
-    // Set viewport explicitly to match intended recording dimensions
-    // This prevents the default 800x600 viewport from clipping the chat
+    const data = await response.json();
+    const matches = Array.from(data.log.matchAll(/\n\|turn\|(\d+)\n/g));
+    const totalTurns = matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
+    const playersLabel = data.players ? data.players.join(" vs ") : "Unknown Battle";
+
+    fs.mkdirSync(outputFolder, { recursive: true });
+
+    // 3. Page Setup
+    const page = await browser.newPage();
     await page.setViewport({
       width: nochat ? 642 : 1100,
       height: 362,
@@ -88,166 +103,102 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
 
     await page.goto(link, { waitUntil: "load" });
 
+    // Inject UI cleaning styles
     await page.addStyleTag({
       content: `
-                header { display: none !important; }
-                .bar-wrapper { margin: 0 0 !important; }
-                .battle {
-                    top: 0px !important;
-                    left: 0px !important;
-                    ${nochat ? "margin: 0 !important;" : ""}
-                }
-                .battle-log {
-                    top: 0px !important;
-                    left: 641px !important;
-                    ${nochat ? "display: none !important;" : ""}
-                }
-                `,
+        header, .replay-controls, #LeaderboardBTF { display: none !important; }
+        .bar-wrapper { margin: 0 !important; }
+        .battle { top: 0 !important; left: 0 !important; ${nochat ? "margin: 0 !important;" : ""} }
+        .battle-log { top: 0 !important; left: 641px !important; ${nochat ? "display: none !important;" : ""} }
+      `,
     });
 
     await page.waitForSelector(".playbutton");
 
-    // Customization
-    // Default: music: yes, audio: yes, video: yes (why would anyone want to not record video..), speed: normal, color scheme: automatic, recordChat: yes
-    // Example for if you want your replay speed to be changed dynamically per individual video on total turns basis:-
-    // if (totalTurns > 20) speed = "fast"
+    // Apply User Preferences
     if (speed !== "normal") await page.select('select[name="speed"]', speed);
-
     if (nomusic) await page.select('select[name="sound"]', "musicoff");
     else if (noaudio) await page.select('select[name="sound"]', "off");
-
-    // Theme
     if (theme !== "auto") await page.select('select[name="darkmode"]', theme);
 
-    // customization done, now remove scrollbar by making below elements invisible
-    await page.addStyleTag({
-      content: `
-                .replay-controls { display: none !important; }
-                #LeaderboardBTF { display: none !important; }
-                `,
-    });
-
-    const stream = await getStream(page, {
-      audio: !noaudio, // no longer a necessity, can be left as true
-      video: true,
-    });
+    // 4. Start Streaming
+    const file = fs.createWriteStream(tempPath);
+    const stream = await getStream(page, { audio: !noaudio, video: true });
 
     await page.click('button[name="play"]');
     stream.pipe(file);
 
-    const estimate = ((totalTurns * 7) / 60).toFixed(2);
-    const playersLabel = data.players
-      ? data.players.join(" vs ")
-      : "Unknown Battle";
-    const logMsg = `⚔️  Recording ${playersLabel} (${data.format}) — ${totalTurns} turns, ~${estimate}min`;
-    if (emitLog) emitLog(logMsg, "info");
-    else console.log(logMsg);
+    const estTime = ((totalTurns * 7) / 60).toFixed(1);
+    emitLog?.(`⚔️ Recording: ${playersLabel} (${data.format}) | ${totalTurns} turns (~${estTime}m)`, "info");
 
-    const onProgress = (currentTurn) => {
+    const updateProgress = (currentTurn) => {
       if (emitProgress) {
-        // Calculate progress percentage, capped at 99% until fully done
-        const progress =
-          totalTurns > 0
-            ? Math.min(Math.floor((currentTurn / totalTurns) * 100), 99)
-            : 0;
-
+        const progress = totalTurns > 0 ? Math.min(Math.floor((currentTurn / totalTurns) * 100), 99) : 0;
         emitProgress(id, link, "recording", {
           players: playersLabel,
           format: data.format,
           currentTurn,
           totalTurns,
-          progress: Math.max(progress, 10), // Start at 10%
+          progress: Math.max(progress, 10),
           speed: speed || "normal",
         });
       }
     };
 
-    // Initial progress report
-    onProgress(0);
+    updateProgress(0);
 
-    // Start checking for victory, up to 10 minutes (some matches can be long)
-    try {
-      await waitUntilVictory(600000, page, onProgress);
-    } catch {}
+    // 5. Wait for Conclusion
+    await waitUntilVictory(600000, page, updateProgress);
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Buffer for animations
 
-    // Wait for 2 seconds so that the battle has completely ended as we read the text earlier than it getting fully animated
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
+    // 6. Cleanup Stream
     stream.unpipe(file);
     file.end();
     await new Promise((resolve) => file.on("finish", resolve));
     stream.destroy();
+    try { await page.close(); } catch {}
 
-    // Check if recorded file actually has data before trying to fix it
-    const tempPath = path.join(outputFolder, `replay-${fileId}-temp.webm`);
+    // 7. Verify Integrity
     const stats = fs.statSync(tempPath);
-    if (stats.size < 1000) {
-      // 262 bytes is the typical 'empty' webm header
-      throw new Error(
-        `Recording empty (only ${stats.size} bytes). The browser extension may have failed to capture the page.`,
-      );
-    }
+    if (stats.size < 1000) throw new Error(`Stream capture failed (empty file).`);
 
-    const fixMsg = `🎬 Fixing metadata for ${playersLabel}...`;
-    if (emitLog) emitLog(fixMsg, "info");
-    else console.log(`Finished recording ${link}`);
+    // 8. Fix WebM Metadata (FFmpeg)
+    emitLog?.(`🎬 Finalizing metadata: ${playersLabel}...`, "info");
+    await fixWebmMetadata(tempPath, finalPath);
 
-    await fixwebm(fileId, outputFolder); // metadata needs to be added for seeking video
+    emitLog?.(`✅ Saved: replay-${fileId}.webm`, "success");
+    emitProgress?.(id, link, "done", { filename: `replay-${fileId}.webm` });
 
-    const saveMsg = `✅ Saved → ${path.join(outputFolder, `replay-${fileId}.webm`)}`;
-    if (emitLog) {
-      emitLog(saveMsg, "success");
-      emitProgress(id, link, "done", { filename: `replay-${fileId}.webm` });
-    } else {
-      console.log(
-        `Recording Saved!\nLocation -> ${path.join(outputFolder, `replay-${fileId}.webm`)}`,
-      );
-    }
+    try { fs.unlinkSync(tempPath); } catch {}
 
-    try {
-      fs.unlinkSync(path.join(outputFolder, `replay-${fileId}-temp.webm`));
-    } catch {}
-
-    try {
-      await page.close();
-    } catch (error) {
-      console.log(error);
-    }
   } catch (err) {
-    try {
-      fs.unlinkSync(path.join(outputFolder, `replay-${fileId}-temp.webm`));
-    } catch {}
-    if (emitLog) {
-      emitLog(`❌ Error recording ${link}\n${err}`, "error");
-      emitProgress(id, link, "error");
-    } else {
-      console.log(`An error occured while downloading ${link}\n` + err);
-    }
+    try { fs.unlinkSync(tempPath); } catch {}
+    const errorMsg = `[Recorder Error] ${playersLabel || link}: ${err.message}`;
+    emitLog?.(errorMsg, "error");
+    emitProgress?.(id, link, "error");
+    console.error(err);
   }
 }
 
-// Updated fixwebm to use outputFolder
-async function fixwebm(fileId, outputFolder) {
+/**
+ * FFmpeg: Metadata Repair
+ */
+async function fixWebmMetadata(input, output) {
   return new Promise((resolve, reject) => {
-    const command = ffmpeg(
-      path.join(outputFolder, `replay-${fileId}-temp.webm`),
-    )
+    ffmpeg(input)
       .withVideoCodec("copy")
-      .withAudioCodec("copy") // Copy the video and audio streams without re-encoding
-      .output(path.join(outputFolder, `replay-${fileId}.webm`))
+      .withAudioCodec("copy")
+      .output(output)
       .on("end", resolve)
       .on("error", (err, stdout, stderr) => {
-        console.error("FFmpeg Error:", err.message);
-        console.error("FFmpeg stderr:", stderr);
-        reject(new Error(`FFmpeg failed: ${err.message}. Stderr: ${stderr}`));
-      });
-
-    command.run();
+        reject(new Error(`FFmpeg processing failed: ${err.message}`));
+      })
+      .run();
   });
 }
 
 module.exports = {
   download,
   waitUntilVictory,
-  fixwebm,
+  fixWebmMetadata,
 };
