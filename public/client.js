@@ -268,9 +268,8 @@ function updateRecordingItem(id, state, meta = {}) {
   const turnsLabel = document.getElementById(`turns-${id}`);
   const fileLabel = document.getElementById(`file-${id}`);
 
-  // Fetching metadata state
   if (meta.players) {
-    nameLabel.textContent = `${meta.players} (${meta.format})`;
+    nameLabel.textContent = `${meta.players}${meta.format ? ` (${meta.format})` : ""}`;
   }
   if (meta.totalTurns && turnsLabel) {
     const current = meta.currentTurn || 0;
@@ -282,7 +281,29 @@ function updateRecordingItem(id, state, meta = {}) {
     speedLabel.textContent = `Speed: ${capitalized}`;
   }
 
-  if (state === "recording") {
+  // Handle all processing states
+  const processingStates = ["starting", "fetching", "setup", "preparing", "finalizing"];
+  
+  if (processingStates.includes(state)) {
+    if (statusBadge) {
+      statusBadge.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+      statusBadge.className = `status-badge processing ${state}`;
+    }
+    
+    if (label) {
+      switch(state) {
+        case "starting": label.textContent = "Moving to active queue..."; break;
+        case "fetching": label.textContent = "Fetching battle metadata..."; break;
+        case "setup": label.textContent = "Initializing browser instance..."; break;
+        case "preparing": label.textContent = "Configuring replay options..."; break;
+        case "finalizing": label.textContent = "Fixing video metadata (FFmpeg)..."; break;
+      }
+    }
+    
+    if (progressFill && state !== "finalizing") progressFill.style.width = "5%";
+    if (progressFill && state === "finalizing") progressFill.style.width = "99%";
+  } 
+  else if (state === "recording") {
     if (statusBadge) {
       statusBadge.textContent = "Recording";
       statusBadge.className = "status-badge recording";

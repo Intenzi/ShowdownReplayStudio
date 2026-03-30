@@ -160,6 +160,8 @@ async function triggerNext() {
   const emitLog = (msg, type = "info") => io.emit("log", { msg, type });
   const emitProgress = (id, link, state, meta = {}) => io.emit("progress", { id, link, state, ...meta });
 
+  emitProgress(rec.id, rec.link, "starting");
+
   (async () => {
     try {
       const type = config.nochat ? "nochat" : "chat";

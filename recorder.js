@@ -83,6 +83,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
 
   try {
     // 2. Fetch Metadata
+    emitProgress?.(id, link, "fetching");
     const requestLink = link.split("?")[0].replace(/\/$/, "");
     const response = await fetch(`${requestLink}.json`);
     if (!response.ok) throw new Error(`Could not fetch replay data from ${requestLink}.json`);
@@ -95,6 +96,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     fs.mkdirSync(outputFolder, { recursive: true });
 
     // 3. Page Setup
+    emitProgress?.(id, link, "setup");
     const page = await browser.newPage();
     await page.setViewport({
       width: nochat ? 642 : 1100,
@@ -114,6 +116,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
       `,
     });
 
+    emitProgress?.(id, link, "preparing");
     await page.waitForSelector(".playbutton");
 
     // Apply User Preferences
@@ -165,10 +168,11 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
 
     // 8. Fix WebM Metadata (FFmpeg)
     emitLog?.(`🎬 Finalizing metadata: ${playersLabel}...`, "info");
+    emitProgress?.(id, link, "finalizing", { players: playersLabel });
     await fixWebmMetadata(tempPath, finalPath);
 
     emitLog?.(`✅ Saved: replay-${fileId}.webm`, "success");
-    emitProgress?.(id, link, "done", { filename: `replay-${fileId}.webm` });
+    emitProgress?.(id, link, "done", { filename: `replay-${fileId}.webm`, players: playersLabel });
 
     try { fs.unlinkSync(tempPath); } catch {}
 
