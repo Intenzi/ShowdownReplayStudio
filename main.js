@@ -21,38 +21,65 @@ const APP_PORT = process.env.PORT || 57335;
  */
 function getChromiumPath() {
   const appDir = path.dirname(process.execPath);
-  const baseInExec = path.join(appDir, "chromium");
-  const baseInCwd = path.join(process.cwd(), "chromium");
-  const base = fs.existsSync(baseInExec) ? baseInExec : baseInCwd;
+  
+  // Search in multiple locations to support portable layouts
+  const possibleBases = [
+    path.join(appDir, "chromium"),
+    path.join(appDir, "resources", "chromium"),
+    path.join(appDir, "app", "chromium"),
+    path.join(process.cwd(), "chromium")
+  ];
+  
+  const base = possibleBases.find(p => fs.existsSync(p)) || possibleBases[0];
+
+  if (!fs.existsSync(base)) {
+    return null;
+  }
+
+  console.log(`[System] Chromium folder found: ${base}`);
 
   if (os.platform() === "win32") {
-    return path.join(base, "chrome.exe");
+    const winPath = path.join(base, "chrome.exe");
+    if (fs.existsSync(winPath)) return winPath;
+    const alternateWinPath = path.join(base, "Chromium.exe");
+    if (fs.existsSync(alternateWinPath)) return alternateWinPath;
   }
 
   if (os.platform() === "darwin") {
     try {
-      if (fs.existsSync(base)) {
-        const apps = fs.readdirSync(base).filter((f) => f.endsWith(".app"));
-        const appName = apps[0];
-        if (appName) {
-          return path.join(base, appName, "Contents", "MacOS", appName.replace(".app", ""));
+      const apps = fs.readdirSync(base).filter((f) => f.endsWith(".app"));
+      const appName = apps[0];
+      if (appName) {
+        const contentsDir = path.join(base, appName, "Contents", "MacOS");
+        if (fs.existsSync(contentsDir)) {
+          const binaries = fs.readdirSync(contentsDir).filter(f => !f.startsWith("."));
+          if (binaries.length > 0) {
+            const res = path.join(contentsDir, binaries[0]);
+            console.log(`[System] Resolved macOS browser binary: ${res}`);
+            return res;
+          }
         }
+        // Fallback to name-based replacement if exploration fails
+        const res = path.join(base, appName, "Contents", "MacOS", appName.replace(".app", ""));
+        if (fs.existsSync(res)) return res;
       }
-    } catch {}
-    return path.join(base, "Chromium.app", "Contents", "MacOS", "Chromium");
+    } catch (err) {
+      console.warn(`[System] Error during macOS browser search: ${err.message}`);
+    }
   }
 
-  return path.join(base, "chrome");
+  const linuxPath = path.join(base, "chrome");
+  if (fs.existsSync(linuxPath)) return linuxPath;
+
+  return null;
 }
 
-const executablePath = getChromiumPath();
+const bundledExecutablePath = getChromiumPath();
 
 // Ensure executable permissions on Unix-like systems
-if (os.platform() !== "win32") {
+if (os.platform() !== "win32" && bundledExecutablePath) {
   try {
-    if (fs.existsSync(executablePath)) {
-      fs.chmodSync(executablePath, 0o755);
-    }
+    fs.chmodSync(bundledExecutablePath, 0o755);
   } catch (err) {
     console.warn(`[System] Warning: Could not set permissions on Chromium: ${err.message}`);
   }
@@ -120,13 +147,44 @@ function saveConfig(cfg) {
 const browsers = { nochat: null, chat: null };
 
 async function launchOptimizedBrowser(width, height) {
-  const launchPath = fs.existsSync(executablePath) ? executablePath : require("puppeteer").executablePath();
+  let launchPath = bundledExecutablePath;
+
+  if (!launchPath || !fs.existsSync(launchPath)) {
+    const puppeteerPath = require("puppeteer").executablePath();
+    if (fs.existsSync(puppeteerPath)) {
+      launchPath = puppeteerPath;
+    } else {
+      // System fallback for development environments where puppeteer download might have failed
+      if (os.platform() === "win32") {
+        const paths = [
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+          path.join(os.homedir(), "AppData\\Local\\Google\\Chrome\\Application\\chrome.exe"),
+          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+        ];
+        launchPath = paths.find(p => fs.existsSync(p)) || puppeteerPath;
+      } else if (os.platform() === "darwin") {
+        const paths = [
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+        ];
+        launchPath = paths.find(p => fs.existsSync(p)) || puppeteerPath;
+      } else {
+        launchPath = puppeteerPath;
+      }
+    }
+  }
 
   // Resolve extension path for bundled app vs development
-  let extensionPath = path.join(CONFIG_DIR, "extension");
-  if (!fs.existsSync(extensionPath)) {
-    extensionPath = path.join(__dirname, "node_modules", "puppeteer-stream", "extension");
-  }
+  const appDir = path.dirname(process.execPath);
+  const possibleExtensionPaths = [
+    path.join(appDir, "extension"),
+    path.join(appDir, "resources", "extension"),
+    path.join(appDir, "app", "extension"),
+    path.join(process.cwd(), "node_modules", "puppeteer-stream", "extension")
+  ];
+  
+  let extensionPath = possibleExtensionPaths.find(p => fs.existsSync(p)) || possibleExtensionPaths[0];
 
   /**
    * Note: We temporarily override path.join because puppeteer-stream 
@@ -212,7 +270,12 @@ async function triggerNext() {
  */
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -338,17 +401,44 @@ io.on("connection", (socket) => {
 /**
  * START APPLICATION
  */
-server.listen(APP_PORT, async () => {
+server.listen(APP_PORT, "0.0.0.0", async () => {
   console.log(`[Server] Showdown Replay Studio starting on http://localhost:${APP_PORT}`);
 
   try {
     console.log("[System] Initializing background browsers...");
+    
+    // Integrity check for bundled environments
+    const isBundled = process.pkg;
+    if (isBundled && !bundledExecutablePath) {
+      console.warn("⚠️ [Warning] Bundled Chromium not found in 'resources' or sibling directory.");
+      console.warn("👉 Please ensure you haven't moved the EXE away from its 'resources' folder.");
+    }
+
     browsers.nochat = await launchOptimizedBrowser(642, 450);
     browsers.chat = await launchOptimizedBrowser(1100, 450);
     console.log("[System] Application ready.");
   } catch (err) {
     console.error(`[Error] critical initialization failure: ${err.message}`);
+    console.error(err.stack); // More detail
   }
 
   await open(`http://localhost:${APP_PORT}`);
+});
+
+/**
+ * GLOBAL PROCESS ERROR HANDLERS
+ */
+process.on("uncaughtException", (err) => {
+  console.error("[Fatal Error] Uncaught Exception:", err.message);
+  console.error(err.stack);
+  // Give logs a moment to flush 
+  setTimeout(() => process.exit(1), 1000);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[Fatal Error] Unhandled Rejection at:", promise, "reason:", reason);
+  // Check if reason is an Error object
+  if (reason instanceof Error) {
+    console.error(reason.stack);
+  }
 });
