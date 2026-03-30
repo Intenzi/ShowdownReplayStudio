@@ -11,6 +11,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
     <!-- CSS -->
     <link rel="stylesheet" href="style.css" />
 
@@ -25,16 +28,16 @@
             <h1>Showdown Replay Studio</h1>
             <span class="app-badge" id="versionBadge">v1.1.0</span>
         </div>
-        
+
         <div class="header-status">
             <a class="source-repo visible" id="sourceRepo" href="https://github.com/Intenzi/ShowdownReplayDownloader" target="_blank" aria-label="View source on GitHub">
                 <span>View Source</span>
             </a>
-            
+
             <a class="update-available" id="updateBanner" href="#" target="_blank" aria-label="Update available, click to view releases">
                 <span>Update Available</span>
             </a>
-            
+
             <div class="status-indicator" aria-live="polite">
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Connecting...</span>
@@ -172,7 +175,23 @@
                 </div>
             </div>
         </section>
-    </main>    <script src="client.js"></script>
+    </main>    <!-- Video Viewer Modal -->
+    <div id="videoModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-content" id="modalContainer" tabindex="-1">
+            <div class="modal-header">
+                <h3 id="modalTitle">Replay Preview</h3>
+                <button class="modal-close" id="btnCloseModal" aria-label="Close preview">&times;</button>
+            </div>
+            <div class="modal-body">
+                <video id="videoPlayer" controls autoplay>
+                    <source src="" type="video/webm">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        </div>
+    </div>
+
+    <script src="client.js"></script>
 </body>
 </html>
 
