@@ -14,7 +14,9 @@
     "bundle:mac": "node scripts/bundle_mac.js",
     "package:mac": "npm run build:mac && npm run bundle:mac",
     "build:linux": "pkg . --targets node18-linux-x64 --output dist/showdown-studio-linux --compress GZip",
-    "build:all": "mkdir -p dist && npm run package:win && npm run package:mac && npm run build:linux"
+    "bundle:linux": "node scripts/bundle_linux.js",
+    "package:linux": "npm run build:linux && npm run bundle:linux",
+    "build:all": "mkdir -p dist && npm run package:win && npm run package:mac && npm run package:linux"
   },
   "pkg": {
     "assets": [
