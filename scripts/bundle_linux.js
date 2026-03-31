@@ -41,26 +41,30 @@ const extensionSrc = path.join(__dirname, "..", "node_modules", "puppeteer-strea
 if (fs.existsSync(extensionSrc)) {
   console.log("🧩 Bundling puppeteer-stream extension...");
   const dest = path.join(RESOURCES_DIR, "extension");
-  fs.mkdirSync(dest, { recursive: true });
-  execSync(`cp -R "${extensionSrc}/"* "${dest}/"`);
+  try {
+    fs.cpSync(extensionSrc, dest, { recursive: true });
+  } catch (e) {
+    console.warn("⚠️ Failed to bundle extension:", e.message);
+  }
 }
 
 // Chromium
 const chromiumDest = path.join(RESOURCES_DIR, "chromium");
 if (fs.existsSync(chromiumSrc)) {
   console.log("🌐 Bundling local Chromium instance...");
-  // Use cp -R to copy the directory contents
-  execSync(`cp -R "${chromiumSrc}/"* "${chromiumDest}/"`);
+  try {
+    fs.cpSync(chromiumSrc, chromiumDest, { recursive: true });
+  } catch (e) {
+    console.error("❌ Failed to bundle Chromium:", e.message);
+  }
 } else {
   console.log("🔍 Local 'chromium' folder missing. Attempting to locate Puppeteer's Chromium...");
   try {
-    const puppeteerExec = "node -e \"console.log(require('puppeteer').executablePath())\"";
-    const puppeteerPath = execSync(puppeteerExec, { encoding: "utf8" }).trim();
+    const puppeteerPath = require("puppeteer").executablePath();
     if (puppeteerPath && fs.existsSync(puppeteerPath)) {
       const chromeDir = path.dirname(puppeteerPath);
       console.log(`🚀 Found Puppeteer browser at: ${chromeDir}`);
-      fs.mkdirSync(chromiumDest, { recursive: true });
-      execSync(`cp -R "${chromeDir}/"* "${chromiumDest}/"`);
+      fs.cpSync(chromeDir, chromiumDest, { recursive: true });
     }
   } catch (err) {
     console.warn("⚠️ Could not automatically bundle a browser.");
