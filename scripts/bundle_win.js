@@ -38,24 +38,16 @@ fs.copyFileSync(
 
 // 4. Bundle Required Dependencies
 const chromiumSrc = path.join(__dirname, "..", "chromium");
-const extensionSrc = path.join(
-  __dirname,
-  "..",
-  "node_modules",
-  "puppeteer-stream",
-  "extension",
-);
+const extensionSrc = path.join(__dirname, "..", "node_modules", "puppeteer-stream", "extension");
 
 // Extension
 if (fs.existsSync(extensionSrc)) {
   console.log("🧩 Bundling puppeteer-stream extension...");
   const dest = path.join(RESOURCES_DIR, "extension");
-  fs.mkdirSync(dest, { recursive: true });
-
-  if (process.platform === "win32") {
-    execSync(`xcopy /S /E /I /Y "${extensionSrc}" "${dest}"`);
-  } else {
-    execSync(`cp -R "${extensionSrc}/" "${dest}/"`);
+  try {
+    fs.cpSync(extensionSrc, dest, { recursive: true });
+  } catch (e) {
+    console.warn("⚠️ Failed to bundle extension:", e.message);
   }
 }
 
@@ -63,40 +55,22 @@ if (fs.existsSync(extensionSrc)) {
 const chromiumDest = path.join(RESOURCES_DIR, "chromium");
 if (fs.existsSync(chromiumSrc)) {
   console.log("🌐 Bundling local Chromium instance...");
-  fs.mkdirSync(chromiumDest, { recursive: true });
-  if (process.platform === "win32") {
-    execSync(`xcopy /S /E /I /Y "${chromiumSrc}" "${chromiumDest}"`);
-  } else {
-    execSync(`cp -R "${chromiumSrc}/" "${chromiumDest}/"`);
+  try {
+    fs.cpSync(chromiumSrc, chromiumDest, { recursive: true });
+  } catch (e) {
+    console.error("❌ Failed to bundle Chromium:", e.message);
   }
 } else {
-  console.log(
-    "🔍 Local 'chromium' folder missing. Attempting to locate Puppeteer's Chromium...",
-  );
+  console.log("🔍 Local 'chromium' folder missing. Attempting to locate Puppeteer's Chromium...");
   try {
-    // Require Puppeteer directly in the current process to avoid stdout pollution
     const puppeteerPath = require("puppeteer").executablePath();
-
     if (puppeteerPath && fs.existsSync(puppeteerPath)) {
       const chromeDir = path.dirname(puppeteerPath);
       console.log(`🚀 Found Puppeteer browser at: ${chromeDir}`);
-
-      fs.mkdirSync(chromiumDest, { recursive: true });
-      if (process.platform === "win32") {
-        execSync(`xcopy /S /E /I /Y "${chromeDir}" "${chromiumDest}"`);
-      } else {
-        execSync(`cp -R "${chromeDir}/" "${chromiumDest}/"`);
-      }
-    } else {
-      console.warn(
-        "⚠️ Path found, but the file doesn't exist at:",
-        puppeteerPath,
-      );
+      fs.cpSync(chromeDir, chromiumDest, { recursive: true });
     }
   } catch (err) {
-    console.warn(
-      "⚠️ Could not automatically bundle a browser. Is puppeteer installed?",
-    );
+    console.warn("⚠️ Could not automatically bundle a browser.");
   }
 }
 
