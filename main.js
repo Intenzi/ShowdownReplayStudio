@@ -21,16 +21,16 @@ const APP_PORT = process.env.PORT || 57335;
  */
 function getChromiumPath() {
   const appDir = path.dirname(process.execPath);
-  
+
   // Search in multiple locations to support portable layouts
   const possibleBases = [
     path.join(appDir, "chromium"),
     path.join(appDir, "resources", "chromium"),
     path.join(appDir, "app", "chromium"),
-    path.join(process.cwd(), "chromium")
+    path.join(process.cwd(), "chromium"),
   ];
-  
-  const base = possibleBases.find(p => fs.existsSync(p)) || possibleBases[0];
+
+  const base = possibleBases.find((p) => fs.existsSync(p)) || possibleBases[0];
 
   if (!fs.existsSync(base)) {
     return null;
@@ -52,7 +52,9 @@ function getChromiumPath() {
       if (appName) {
         const contentsDir = path.join(base, appName, "Contents", "MacOS");
         if (fs.existsSync(contentsDir)) {
-          const binaries = fs.readdirSync(contentsDir).filter(f => !f.startsWith("."));
+          const binaries = fs
+            .readdirSync(contentsDir)
+            .filter((f) => !f.startsWith("."));
           if (binaries.length > 0) {
             const res = path.join(contentsDir, binaries[0]);
             console.log(`[System] Resolved macOS browser binary: ${res}`);
@@ -60,11 +62,19 @@ function getChromiumPath() {
           }
         }
         // Fallback to name-based replacement if exploration fails
-        const res = path.join(base, appName, "Contents", "MacOS", appName.replace(".app", ""));
+        const res = path.join(
+          base,
+          appName,
+          "Contents",
+          "MacOS",
+          appName.replace(".app", ""),
+        );
         if (fs.existsSync(res)) return res;
       }
     } catch (err) {
-      console.warn(`[System] Error during macOS browser search: ${err.message}`);
+      console.warn(
+        `[System] Error during macOS browser search: ${err.message}`,
+      );
     }
   }
 
@@ -81,7 +91,9 @@ if (os.platform() !== "win32" && bundledExecutablePath) {
   try {
     fs.chmodSync(bundledExecutablePath, 0o755);
   } catch (err) {
-    console.warn(`[System] Warning: Could not set permissions on Chromium: ${err.message}`);
+    console.warn(
+      `[System] Warning: Could not set permissions on Chromium: ${err.message}`,
+    );
   }
 }
 
@@ -93,7 +105,8 @@ function getConfigDir() {
   let baseDir;
 
   if (process.platform === "win32") {
-    baseDir = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+    baseDir =
+      process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
   } else if (process.platform === "darwin") {
     baseDir = path.join(os.homedir(), "Library", "Application Support");
   } else {
@@ -159,16 +172,19 @@ async function launchOptimizedBrowser(width, height) {
         const paths = [
           "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
           "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          path.join(os.homedir(), "AppData\\Local\\Google\\Chrome\\Application\\chrome.exe"),
-          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe"
+          path.join(
+            os.homedir(),
+            "AppData\\Local\\Google\\Chrome\\Application\\chrome.exe",
+          ),
+          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
         ];
-        launchPath = paths.find(p => fs.existsSync(p)) || puppeteerPath;
+        launchPath = paths.find((p) => fs.existsSync(p)) || puppeteerPath;
       } else if (os.platform() === "darwin") {
         const paths = [
           "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+          "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
         ];
-        launchPath = paths.find(p => fs.existsSync(p)) || puppeteerPath;
+        launchPath = paths.find((p) => fs.existsSync(p)) || puppeteerPath;
       } else {
         launchPath = puppeteerPath;
       }
@@ -181,19 +197,22 @@ async function launchOptimizedBrowser(width, height) {
     path.join(appDir, "extension"),
     path.join(appDir, "resources", "extension"),
     path.join(appDir, "app", "extension"),
-    path.join(process.cwd(), "node_modules", "puppeteer-stream", "extension")
+    path.join(process.cwd(), "node_modules", "puppeteer-stream", "extension"),
   ];
-  
-  let extensionPath = possibleExtensionPaths.find(p => fs.existsSync(p)) || possibleExtensionPaths[0];
+
+  let extensionPath =
+    possibleExtensionPaths.find((p) => fs.existsSync(p)) ||
+    possibleExtensionPaths[0];
 
   /**
-   * Note: We temporarily override path.join because puppeteer-stream 
+   * Note: We temporarily override path.join because puppeteer-stream
    * has a hardcoded relative path to its internal extension.
    */
   const originalJoin = path.join;
   path.join = (...args) => {
     const res = originalJoin(...args);
-    if (res.includes("puppeteer-stream") && res.endsWith("extension")) return extensionPath;
+    if (res.includes("puppeteer-stream") && res.endsWith("extension"))
+      return extensionPath;
     return res;
   };
 
@@ -231,11 +250,12 @@ async function triggerNext() {
   const rec = globalQueue.shift();
   concurrentCount++;
   activeRecordings++;
-  
+
   io.emit("status", { ready: true, recording: true });
 
   const emitLog = (msg, type = "info") => io.emit("log", { msg, type });
-  const emitProgress = (id, link, state, meta = {}) => io.emit("progress", { id, link, state, ...meta });
+  const emitProgress = (id, link, state, meta = {}) =>
+    io.emit("progress", { id, link, state, ...meta });
 
   emitProgress(rec.id, rec.link, "starting");
 
@@ -244,10 +264,20 @@ async function triggerNext() {
       const type = config.nochat ? "nochat" : "chat";
       if (!browsers[type] || !browsers[type].isConnected()) {
         emitLog(`[Browser] Initializing ${type} instance...`, "info");
-        browsers[type] = await launchOptimizedBrowser(config.nochat ? 642 : 1100, 450);
+        browsers[type] = await launchOptimizedBrowser(
+          config.nochat ? 642 : 1100,
+          450,
+        );
       }
 
-      await download(rec.link, rec.id, browsers[type], config, emitLog, emitProgress);
+      await download(
+        rec.link,
+        rec.id,
+        browsers[type],
+        config,
+        emitLog,
+        emitProgress,
+      );
     } catch (err) {
       emitLog(`[Error] ${err.message}`, "error");
     } finally {
@@ -273,8 +303,8 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+  },
 });
 
 app.use(express.json());
@@ -292,9 +322,12 @@ app.post("/api/config", (req, res) => {
 // API: System
 app.get("/api/version", async (req, res) => {
   try {
-    const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`);
+    const response = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+    );
     const data = await response.json();
-    const update = data.tag_name !== `v${CURRENT_VERSION}` ? data.tag_name : null;
+    const update =
+      data.tag_name !== `v${CURRENT_VERSION}` ? data.tag_name : null;
     res.json({ current: CURRENT_VERSION, update });
   } catch {
     res.json({ current: CURRENT_VERSION, update: null });
@@ -348,12 +381,20 @@ app.post("/api/pick-folder", async (req, res) => {
   try {
     let folder = null;
     if (process.platform === "win32") {
-      const ps = "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.ShowDialog() | Out-Null; $f.SelectedPath";
-      folder = execSync(`powershell -command "${ps}"`, { encoding: "utf8" }).trim();
+      const ps =
+        "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.ShowDialog() | Out-Null; $f.SelectedPath";
+      folder = execSync(`powershell -command "${ps}"`, {
+        encoding: "utf8",
+      }).trim();
     } else if (process.platform === "darwin") {
-      folder = execSync(`osascript -e 'POSIX path of (choose folder with prompt "Select output folder")'`, { encoding: "utf8" }).trim();
+      folder = execSync(
+        `osascript -e 'POSIX path of (choose folder with prompt "Select output folder")'`,
+        { encoding: "utf8" },
+      ).trim();
     } else {
-      folder = execSync("zenity --file-selection --directory 2>/dev/null", { encoding: "utf8" }).trim();
+      folder = execSync("zenity --file-selection --directory 2>/dev/null", {
+        encoding: "utf8",
+      }).trim();
     }
 
     if (folder) {
@@ -402,16 +443,22 @@ io.on("connection", (socket) => {
  * START APPLICATION
  */
 server.listen(APP_PORT, "0.0.0.0", async () => {
-  console.log(`[Server] Showdown Replay Studio starting on http://localhost:${APP_PORT}`);
+  console.log(
+    `[Server] Showdown Replay Studio starting on http://localhost:${APP_PORT}`,
+  );
 
   try {
     console.log("[System] Initializing background browsers...");
-    
+
     // Integrity check for bundled environments
     const isBundled = process.pkg;
     if (isBundled && !bundledExecutablePath) {
-      console.warn("⚠️ [Warning] Bundled Chromium not found in 'resources' or sibling directory.");
-      console.warn("👉 Please ensure you haven't moved the EXE away from its 'resources' folder.");
+      console.warn(
+        "⚠️ [Warning] Bundled Chromium not found in 'resources' or sibling directory.",
+      );
+      console.warn(
+        "👉 Please ensure you haven't moved the EXE away from its 'resources' folder.",
+      );
     }
 
     browsers.nochat = await launchOptimizedBrowser(642, 450);
@@ -431,12 +478,17 @@ server.listen(APP_PORT, "0.0.0.0", async () => {
 process.on("uncaughtException", (err) => {
   console.error("[Fatal Error] Uncaught Exception:", err.message);
   console.error(err.stack);
-  // Give logs a moment to flush 
+  // Give logs a moment to flush
   setTimeout(() => process.exit(1), 1000);
 });
 
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("[Fatal Error] Unhandled Rejection at:", promise, "reason:", reason);
+  console.error(
+    "[Fatal Error] Unhandled Rejection at:",
+    promise,
+    "reason:",
+    reason,
+  );
   // Check if reason is an Error object
   if (reason instanceof Error) {
     console.error(reason.stack);

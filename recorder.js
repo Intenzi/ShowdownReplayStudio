@@ -104,9 +104,11 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
   const finalPath = path.join(outputFolder, `replay-${fileId}.webm`);
 
   // 1. Validation
-  const isValidLink = (link.startsWith("https://replay.pokemonshowdown.com/") || 
-                     link.startsWith("http://replay.pokemonshowdown.com/")) ||
-                    (link.endsWith(".json") || link.endsWith(".log"));
+  const isValidLink =
+    link.startsWith("https://replay.pokemonshowdown.com/") ||
+    link.startsWith("http://replay.pokemonshowdown.com/") ||
+    link.endsWith(".json") ||
+    link.endsWith(".log");
 
   if (!isValidLink) {
     const errorMsg = `[Recorder] Invalid Showdown link: ${link}`;
@@ -119,12 +121,18 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     emitProgress?.(id, link, "fetching");
     const requestLink = link.split("?")[0].replace(/\/$/, "");
     const response = await fetch(`${requestLink}.json`);
-    if (!response.ok) throw new Error(`Could not fetch replay data from ${requestLink}.json`);
+    if (!response.ok)
+      throw new Error(`Could not fetch replay data from ${requestLink}.json`);
 
     const data = await response.json();
     const matches = Array.from(data.log.matchAll(/\n\|turn\|(\d+)\n/g));
-    const totalTurns = matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
-    playersLabel = data ? (data.players ? data.players.join(" vs ") : "Unknown Battle") : "Unknown Replay";
+    const totalTurns =
+      matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
+    playersLabel = data
+      ? data.players
+        ? data.players.join(" vs ")
+        : "Unknown Battle"
+      : "Unknown Replay";
 
     fs.mkdirSync(outputFolder, { recursive: true });
 
@@ -181,11 +189,17 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     stream.pipe(file);
 
     const estTime = ((totalTurns * 7) / 60).toFixed(1);
-    emitLog?.(`⚔️ Recording: ${playersLabel} (${data.format}) | ${totalTurns} turns (~${estTime}m)`, "info");
+    emitLog?.(
+      `⚔️ Recording: ${playersLabel} (${data.format}) | ${totalTurns} turns (~${estTime}m)`,
+      "info",
+    );
 
     const updateProgress = (currentTurn) => {
       if (emitProgress) {
-        const progress = totalTurns > 0 ? Math.min(Math.floor((currentTurn / totalTurns) * 100), 99) : 0;
+        const progress =
+          totalTurns > 0
+            ? Math.min(Math.floor((currentTurn / totalTurns) * 100), 99)
+            : 0;
         emitProgress(id, link, "recording", {
           players: playersLabel,
           format: data.format,
@@ -208,25 +222,34 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     file.end();
     await new Promise((resolve) => file.on("finish", resolve));
     stream.destroy();
-    try { await page.close(); } catch {}
+    try {
+      await page.close();
+    } catch {}
 
     // 7. Verify Integrity
     const stats = fs.statSync(tempPath);
-    if (stats.size < 1000) throw new Error(`Stream capture failed (empty file).`);
+    if (stats.size < 1000)
+      throw new Error(`Stream capture failed (empty file).`);
 
     // 8. Fix WebM Metadata (FFmpeg)
     emitLog?.(`🎬 Finalizing metadata: ${playersLabel}...`, "info");
     emitProgress?.(id, link, "finalizing", { players: playersLabel });
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Delay for file handle release on Windows
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Delay for file handle release on Windows
     await fixWebmMetadata(tempPath, finalPath);
 
     emitLog?.(`✅ Saved: replay-${fileId}.webm`, "success");
-    emitProgress?.(id, link, "done", { filename: `replay-${fileId}.webm`, players: playersLabel });
+    emitProgress?.(id, link, "done", {
+      filename: `replay-${fileId}.webm`,
+      players: playersLabel,
+    });
 
-    try { fs.unlinkSync(tempPath); } catch {}
-
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {}
   } catch (err) {
-    try { fs.unlinkSync(tempPath); } catch {}
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {}
     const errorMsg = `[Recorder Error] ${playersLabel || link}: ${err.message}`;
     emitLog?.(errorMsg, "error");
     emitProgress?.(id, link, "error");
@@ -243,8 +266,12 @@ async function fixWebmMetadata(input, output) {
     const { execSync } = require("child_process");
     execSync(`"${ffmpegPath}" -version`, { stdio: "ignore" });
   } catch (err) {
-    console.error(`[FFmpeg] Pre-check failed for binary: ${ffmpegPath}. Skipping metadata repair.`);
-    console.error("[FFmpeg] The recording will still be saved but might have seek/duration issues in some players.");
+    console.error(
+      `[FFmpeg] Pre-check failed for binary: ${ffmpegPath}. Skipping metadata repair.`,
+    );
+    console.error(
+      "[FFmpeg] The recording will still be saved but might have seek/duration issues in some players.",
+    );
     fs.copyFileSync(input, output);
     return;
   }
@@ -267,14 +294,27 @@ async function fixWebmMetadata(input, output) {
           console.error("[FFmpeg] Stderr:", stderr);
           // If FFmpeg fails, we still want to "succeed" by just using the raw file
           console.warn("[FFmpeg] Repair failed, using raw capture instead.");
-          try { fs.copyFileSync(input, output); resolve(); } catch (e) { reject(e); }
+          try {
+            fs.copyFileSync(input, output);
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
         });
 
       command.run();
     } catch (err) {
-      console.error("[FFmpeg] Synchronous error launching FFmpeg:", err.message);
+      console.error(
+        "[FFmpeg] Synchronous error launching FFmpeg:",
+        err.message,
+      );
       // Fallback
-      try { fs.copyFileSync(input, output); resolve(); } catch (e) { reject(e); }
+      try {
+        fs.copyFileSync(input, output);
+        resolve();
+      } catch (e) {
+        reject(e);
+      }
     }
   });
 }
