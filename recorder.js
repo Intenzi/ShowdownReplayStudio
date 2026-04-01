@@ -67,7 +67,7 @@ ffmpeg.setFfmpegPath(ffmpegPath);
  */
 async function waitUntilVictory(timeout, page, onProgress) {
   const startTime = Date.now();
-  
+
   while (Date.now() - startTime < timeout) {
     try {
       // Extract current turn number
@@ -142,11 +142,20 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     // Inject UI cleaning styles
     await page.addStyleTag({
       content: `
-        header, .replay-controls, #LeaderboardBTF { display: none !important; }
+        header, .replay-controls, #LeaderboardBTF, .fc-consent-root { display: none !important; }
         .bar-wrapper { margin: 0 !important; }
         .battle { top: 0 !important; left: 0 !important; ${nochat ? "margin: 0 !important;" : ""} }
         .battle-log { top: 0 !important; left: 641px !important; ${nochat ? "display: none !important;" : ""} }
       `,
+    });
+
+    // Remove consent banner and ads proactively to prevent blocking interactions
+    await page.evaluate(() => {
+      document.querySelector(".fc-consent-root")?.remove();
+      document.querySelector("#LeaderboardBTF")?.remove();
+      // Sometimes the banner has a backdrop that blocks clicks
+      const backdrop = document.querySelector(".fc-ab-root");
+      if (backdrop) backdrop.remove();
     });
 
     emitProgress?.(id, link, "preparing");
@@ -157,6 +166,12 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     if (nomusic) await page.select('select[name="sound"]', "musicoff");
     else if (noaudio) await page.select('select[name="sound"]', "off");
     if (theme !== "auto") await page.select('select[name="darkmode"]', theme);
+
+    // Final check for blocker right before click
+    await page.evaluate(() =>
+      document.querySelector(".fc-consent-root")?.remove(),
+    );
+    await page.click(".playbutton");
 
     // 4. Start Streaming
     const file = fs.createWriteStream(tempPath);
@@ -254,7 +269,7 @@ async function fixWebmMetadata(input, output) {
           console.warn("[FFmpeg] Repair failed, using raw capture instead.");
           try { fs.copyFileSync(input, output); resolve(); } catch (e) { reject(e); }
         });
-      
+
       command.run();
     } catch (err) {
       console.error("[FFmpeg] Synchronous error launching FFmpeg:", err.message);
