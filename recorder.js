@@ -183,7 +183,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
 
     // 4. Start Streaming
     const file = fs.createWriteStream(tempPath);
-    const stream = await getStream(page, { audio: !noaudio, video: true });
+    const stream = await getStream(page, { audio: true, video: true });
 
     await page.click('button[name="play"]');
     stream.pipe(file);
