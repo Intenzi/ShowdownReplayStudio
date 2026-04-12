@@ -3,6 +3,8 @@ let config = {};
 let setupDone = false;
 let isRecording = false;
 let recordingData = {}; // Track state of each recording
+let audioMode = "all";
+let chatMode = "hide";
 
 /**
  * Application State Management
@@ -65,18 +67,12 @@ function applyConfig(cfg) {
   if (setupFolderPath)
     setupFolderPath.textContent = cfg.outputFolder || "No folder selected";
 
-  // Toggles
-  ["nomusic", "noaudio", "nochat"].forEach((id) => {
-    const checked = cfg[id];
-    const input = document.getElementById(id);
-    if (input) input.checked = checked;
+  // Preferences
+  if (cfg.noaudio) setAudio("noaudio");
+  else if (cfg.nomusic) setAudio("nomusic");
+  else setAudio("all");
 
-    const chip = document.getElementById(`chip-${id}`);
-    if (chip) {
-      if (checked) chip.classList.add("active");
-      else chip.classList.remove("active");
-    }
-  });
+  setChat(cfg.nochat ? "hide" : "show");
 }
 
 function updateStatus(status) {
@@ -107,16 +103,19 @@ function updateStatus(status) {
 /**
  * UI Actions
  */
-function toggleOption(id) {
-  const input = document.getElementById(id);
-  if (!input) return;
+function setAudio(mode) {
+  audioMode = mode;
+  document.querySelectorAll("#audioSelector .segment").forEach((seg) => {
+    seg.classList.toggle("active", seg.id === `segment-audio-${mode}`);
+  });
+  updateConfig();
+}
 
-  input.checked = !input.checked;
-  const chip = document.getElementById(`chip-${id}`);
-  if (chip) {
-    if (input.checked) chip.classList.add("active");
-    else chip.classList.remove("active");
-  }
+function setChat(mode) {
+  chatMode = mode;
+  document.querySelectorAll("#chatSelector .segment").forEach((seg) => {
+    seg.classList.toggle("active", seg.id === `segment-chat-${mode}`);
+  });
   updateConfig();
 }
 
@@ -125,9 +124,9 @@ function updateConfig() {
     speed: document.getElementById("speed")?.value,
     theme: document.getElementById("theme")?.value,
     bulk: document.getElementById("bulk")?.value,
-    nomusic: document.getElementById("nomusic")?.checked,
-    noaudio: document.getElementById("noaudio")?.checked,
-    nochat: document.getElementById("nochat")?.checked,
+    nomusic: audioMode === "nomusic",
+    noaudio: audioMode === "noaudio",
+    nochat: chatMode === "hide",
   };
 
   fetch("/api/config", {
