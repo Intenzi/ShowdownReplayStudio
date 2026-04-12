@@ -268,7 +268,7 @@ function createRecordingItem(link, id) {
             <div class="rec-meta-row">
                 <span class="rec-subtitle" id="speed-${id}">Speed: —</span>
                 <span class="rec-subtitle" id="turns-${id}">Turns: —</span>
-                <span class="rec-subtitle" id="file-${id}">Filename: Pending...</span>
+                <span class="rec-subtitle hidden" id="file-${id}">Filename: Pending...</span>
             </div>
             <div class="rec-progress-container">
                 <div class="progress-bar-bg">
@@ -364,7 +364,10 @@ function updateRecordingItem(id, state, meta = {}) {
     if (progressFill) progressFill.style.width = "100%";
     if (percent) percent.textContent = "100%";
     if (label) label.textContent = "File saved successfully";
-    if (fileLabel) fileLabel.textContent = `Filename: ${meta.filename}`;
+    if (fileLabel) {
+      fileLabel.textContent = `Filename: ${meta.filename}`;
+      fileLabel.classList.remove("hidden");
+    }
 
     if (actions) {
       actions.innerHTML = `
