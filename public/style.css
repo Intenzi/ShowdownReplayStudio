@@ -476,6 +476,63 @@ body[data-theme="dark"] .segment:hover {
   font-weight: 800;
   padding: 2px 8px;
   border-radius: 10px;
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.count-badge.hidden {
+  display: none;
+}
+
+.ws-path-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ws-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  background: rgba(255, 255, 255, 0.03);
+  width: fit-content;
+  border: 1px solid transparent;
+}
+
+.ws-breadcrumb:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ws-breadcrumb svg {
+  opacity: 0.6;
+}
+
+.btn-icon-mini {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-left: 6px;
+  transition: all 0.2s;
+}
+
+.btn-icon-mini:hover {
+  background: var(--accent-color);
+  color: white;
 }
 
 .count-badge.hidden {

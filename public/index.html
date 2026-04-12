@@ -105,16 +105,7 @@
                           spellcheck="false"></textarea>
             </section>
 
-            <section class="field">
-                <span class="section-label">Output Location</span>
-                <div class="folder-action">
-                    <div id="folderPath" class="folder-path" style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Loading...</div>
-                    <button class="btn-secondary" onclick="pickFolder()" aria-label="Browse for output folder">Browse</button>
-                </div>
-                <div style="margin-top: 8px;">
-                    <button class="btn-secondary" style="width: 100%;" onclick="openOutputFolder()" id="btnOpenFolder">Open Recording Folder</button>
-                </div>
-            </section>
+            <!-- Output Location moved to Workspace Header -->
 
             <section class="form-grid">
                 <div class="field">
@@ -170,7 +161,18 @@
         <section class="workspace" aria-labelledby="workspaceTitle">
             <div class="ws-header">
                 <div class="ws-header-group">
-                    <h2 id="workspaceTitle" class="ws-title">Recording Overview</h2>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <h2 id="workspaceTitle" class="ws-title">Recording Overview</h2>
+                        <div class="ws-path-group">
+                            <div class="ws-breadcrumb" onclick="openOutputFolder()" title="Open Destination Folder">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                <span id="folderPath">Loading...</span>
+                            </div>
+                            <button class="btn-icon-mini" onclick="pickFolder()" title="Change Directory">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                            </button>
+                        </div>
+                    </div>
                     <span id="recordCountBadge" class="count-badge hidden">0</span>
                 </div>
                 <div class="ws-actions">
