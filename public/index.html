@@ -51,6 +51,7 @@
                 <span id="statusText">Connecting...</span>
             </div>
 
+            <button class="btn-secondary" id="themeToggle" onclick="toggleDarkTheme()" title="Toggle Dark/Light Mode" style="margin-right: 8px;">Theme</button>
             <button class="quit-btn" id="btnQuit" onclick="quitApp()" title="Shutdown App">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
@@ -136,13 +137,7 @@
                 </div>
             </section>
 
-            <section class="field">
-                <label for="bulk">Bulk Processing</label>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" id="bulk" value="all" placeholder="# or all" aria-label="Bulk processing count or all" />
-                </div>
-                <small style="color: var(--text-dim); font-size: 0.75rem;">Number of parallel recordings or "all".</small>
-            </section>
+            <!-- Bulk Processing moved to Workspace Header -->
 
             <section class="field">
                 <span class="section-label">Audio Setting</span>
@@ -174,20 +169,57 @@
         <!-- Workspace (Recording Queue) -->
         <section class="workspace" aria-labelledby="workspaceTitle">
             <div class="ws-header">
-                <h2 id="workspaceTitle" class="ws-title">Recording Overview</h2>
+                <div class="ws-header-group">
+                    <h2 id="workspaceTitle" class="ws-title">Recording Overview</h2>
+                    <span id="recordCountBadge" class="count-badge hidden">0</span>
+                </div>
                 <div class="ws-actions">
-                    <button class="btn-secondary" onclick="clearAll()" id="btnClearAll">Clear All</button>
-                    <button class="btn-secondary" id="themeToggle" onclick="toggleDarkTheme()" title="Toggle Dark/Light Mode">Theme</button>
+                    <div class="bulk-limit-container">
+                        <label for="bulk">Bulk Limit</label>
+                        <div class="stepper">
+                            <button onclick="changeBulk(-1)" aria-label="Decrease">&minus;</button>
+                            <input type="text" id="bulk" value="1" readonly />
+                            <button onclick="changeBulk(1)" aria-label="Increase">&plus;</button>
+                        </div>
+                    </div>
+                    <button class="btn-secondary danger" onclick="clearAll()" id="btnClearAll">Clear Workspace</button>
                 </div>
             </div>
 
-            <div id="recordingList" class="recording-list">
-                <!-- Empty State -->
+            <div class="recording-list-container">
+                <!-- EMPTY STATE -->
                 <div class="empty-state" id="emptyState">
                     <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v20M2 12h20" />
                     </svg>
-                    <p>No active recordings. Paste some links and hit "Start Recording" to begin.</p>
+                    <p>No active recordings. Paste some links to begin.</p>
+                </div>
+
+                <!-- LIVE SECTION -->
+                <div id="activeSection" class="list-section hidden">
+                    <div class="section-header">
+                        <span class="section-point"></span>
+                        <h3>Live Recordings</h3>
+                    </div>
+                    <div id="activeList" class="recording-list"></div>
+                </div>
+
+                <!-- QUEUE SECTION -->
+                <div id="queueSection" class="list-section hidden">
+                    <div class="section-header">
+                        <h3>Pending Queue</h3>
+                        <button class="btn-text-only" onclick="clearQueue()">Clear Queue</button>
+                    </div>
+                    <div id="queueList" class="recording-list"></div>
+                </div>
+
+                <!-- FINISHED SECTION -->
+                <div id="finishedSection" class="list-section hidden">
+                    <div class="section-header">
+                        <h3>Completed Downloads</h3>
+                        <button class="btn-text-only" onclick="clearFinished()">Clear Finished</button>
+                    </div>
+                    <div id="finishedList" class="recording-list"></div>
                 </div>
             </div>
         </section>
