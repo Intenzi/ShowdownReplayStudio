@@ -337,52 +337,42 @@ input[type="text"]:hover {
   border-color: var(--primary-color);
 }
 
-.toggle-group {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.toggle-item {
+.segmented-control {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: var(--bg-color);
+  background-color: var(--bg-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  cursor: pointer;
+  padding: 4px;
+  gap: 4px;
+}
+
+.segment {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 4px;
+  font-size: 0.75rem;
   font-weight: 700;
-  font-size: 0.8rem;
-  transition: all 0.2s;
+  color: var(--text-dim);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
-.toggle-item:hover {
-  border-color: var(--accent-color);
+.segment:hover {
+  color: var(--text-main);
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
-.toggle-item.active {
-  border-color: var(--accent-color);
-  background: rgba(255, 145, 77, 0.08);
-  color: var(--accent-color);
-}
-
-.toggle-item input {
-  display: none;
-}
-
-.toggle-circle {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--border-color);
-  transition: all 0.2s;
-}
-
-.toggle-item.active .toggle-circle {
-  border-color: var(--accent-color);
+.segment.active {
   background-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(255, 145, 77, 0.2);
+  color: white;
+  box-shadow: 0 2px 4px rgba(255, 145, 77, 0.2);
+}
+
+body[data-theme="dark"] .segment:hover {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .btn-primary {

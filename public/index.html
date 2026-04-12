@@ -145,23 +145,19 @@
             </section>
 
             <section class="field">
-                <span class="section-label">Preferences</span>
-                <div class="toggle-group">
-                    <label class="toggle-item" id="chip-nomusic" onclick="toggleOption('nomusic')">
-                        <input type="checkbox" id="nomusic" />
-                        <div class="toggle-circle"></div>
-                        <span>No Music</span>
-                    </label>
-                    <label class="toggle-item" id="chip-noaudio" onclick="toggleOption('noaudio')">
-                        <input type="checkbox" id="noaudio" />
-                        <div class="toggle-circle"></div>
-                        <span>No Audio</span>
-                    </label>
-                    <label class="toggle-item active" id="chip-nochat" onclick="toggleOption('nochat')">
-                        <input type="checkbox" id="nochat" checked />
-                        <div class="toggle-circle"></div>
-                        <span>Hide Chat</span>
-                    </label>
+                <span class="section-label">Audio Setting</span>
+                <div class="segmented-control" id="audioSelector">
+                    <button class="segment active" onclick="setAudio('all')" id="segment-audio-all">All Audio</button>
+                    <button class="segment" onclick="setAudio('nomusic')" id="segment-audio-nomusic">Music Off</button>
+                    <button class="segment" onclick="setAudio('noaudio')" id="segment-audio-noaudio">Muted</button>
+                </div>
+            </section>
+
+            <section class="field">
+                <span class="section-label">Chat Visibility</span>
+                <div class="segmented-control" id="chatSelector">
+                    <button class="segment" onclick="setChat('show')" id="segment-chat-show">Show Chat</button>
+                    <button class="segment active" onclick="setChat('hide')" id="segment-chat-hide">Hide Chat</button>
                 </div>
             </section>
 
