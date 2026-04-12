@@ -478,6 +478,32 @@ body[data-theme="dark"] .segment:hover {
   align-items: center;
   gap: 12px;
   margin-bottom: 4px;
+  flex-wrap: wrap; /* Handle many badges */
+}
+
+.rec-badges-container {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: 10px;
+}
+
+.rec-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-color);
+  color: var(--text-dim);
+  border: 1px solid var(--border-color);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.rec-badge.highlight {
+  background: rgba(62, 136, 199, 0.1);
+  color: var(--primary-color);
+  border-color: rgba(62, 136, 199, 0.2);
 }
 
 .rec-name {

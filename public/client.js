@@ -1,4 +1,5 @@
-const socket = (typeof io !== 'undefined') ? io() : { on: () => {}, emit: () => {} };
+const socket =
+  typeof io !== "undefined" ? io() : { on: () => {}, emit: () => {} };
 let config = {};
 let setupDone = false;
 let isRecording = false;
@@ -153,13 +154,17 @@ function openOutputFolder() {
 }
 
 async function quitApp() {
-  if (confirm("Are you sure you want to quit Showdown Replay Studio? This will stop all active and queued recordings.")) {
+  if (
+    confirm(
+      "Are you sure you want to quit Showdown Replay Studio? This will stop all active and queued recordings.",
+    )
+  ) {
     const btn = document.getElementById("btnQuit");
     if (btn) {
       btn.disabled = true;
       btn.textContent = "Shutting down...";
     }
-    
+
     try {
       await fetch("/api/quit", { method: "POST" });
       document.body.innerHTML = `
@@ -204,14 +209,17 @@ function startSetup() {
       setupLog.textContent = labels[currentStep];
     }
 
-    setTimeout(() => {
-      if (el) {
-        el.classList.remove("active");
-        el.classList.add("done");
-      }
-      currentStep++;
-      processStep();
-    }, 800 + Math.random() * 700);
+    setTimeout(
+      () => {
+        if (el) {
+          el.classList.remove("active");
+          el.classList.add("done");
+        }
+        currentStep++;
+        processStep();
+      },
+      800 + Math.random() * 700,
+    );
   };
 
   processStep();
@@ -223,13 +231,14 @@ function startRecording() {
   if (!linksText) return;
 
   const links = linksText.split(/[\s,]+/).filter(Boolean);
+  const currentSpeed = document.getElementById("speed")?.value;
   const recordConfig = {
-    speed: document.getElementById("speed")?.value,
+    speed: currentSpeed,
     theme: document.getElementById("theme")?.value,
     bulk: document.getElementById("bulk")?.value,
-    nomusic: document.getElementById("nomusic")?.checked,
-    noaudio: document.getElementById("noaudio")?.checked,
-    nochat: document.getElementById("nochat")?.checked,
+    nomusic: audioMode === "nomusic",
+    noaudio: audioMode === "noaudio",
+    nochat: chatMode === "hide",
   };
 
   // Clear empty state
@@ -238,7 +247,7 @@ function startRecording() {
 
   const recordings = links.map((link) => {
     const id = Math.random().toString(36).substring(2, 11);
-    createRecordingItem(link, id);
+    createRecordingItem(link, id, { audioMode, chatMode, speed: currentSpeed });
     return { link, id };
   });
 
@@ -248,25 +257,39 @@ function startRecording() {
   if (input) input.value = "";
 }
 
-function createRecordingItem(link, id) {
+function createRecordingItem(link, id, config = {}) {
   if (document.getElementById(`rec-${id}`)) return;
 
   const list = document.getElementById("recordingList");
   if (!list) return;
+
+  // Generate badges for settings
+  let badgesHtml = "";
+  if (config.audioMode === "noaudio")
+    badgesHtml += '<span class="rec-badge">Muted</span>';
+  else if (config.audioMode === "nomusic")
+    badgesHtml += '<span class="rec-badge">No Music</span>';
+
+  if (config.chatMode === "hide")
+    badgesHtml += '<span class="rec-badge">No Chat</span>';
+  else badgesHtml += '<span class="rec-badge">With Chat</span>';
+
+  if (config.speed && config.speed !== "normal")
+    badgesHtml += `<span class="rec-badge highlight">${config.speed}</span>`;
 
   const item = document.createElement("div");
   item.className = "recording-card";
   item.id = `rec-${id}`;
   item.innerHTML = `
         <div class="rec-info">
-            <div class="rec-title">
+            <div class="rec-title" id="header-${id}">
                 <span class="status-badge queued" id="status-${id}">Queued</span>
                 <span class="rec-name" id="name-${id}">Fetching metadata...</span>
             </div>
             <div class="rec-subtitle" id="url-${id}">${link}</div>
-            <div class="rec-meta-row">
-                <span class="rec-subtitle" id="speed-${id}">Speed: —</span>
+            <div class="rec-meta-row" id="meta-${id}">
                 <span class="rec-subtitle" id="turns-${id}">Turns: —</span>
+                <div class="rec-badges-container" id="badges-container-${id}">${badgesHtml}</div>
                 <span class="rec-subtitle hidden" id="file-${id}">Filename: Pending...</span>
             </div>
             <div class="rec-progress-container">
@@ -325,28 +348,44 @@ function updateRecordingItem(id, state, meta = {}) {
   }
 
   // Handle all processing states
-  const processingStates = ["starting", "fetching", "setup", "preparing", "finalizing"];
-  
+  const processingStates = [
+    "starting",
+    "fetching",
+    "setup",
+    "preparing",
+    "finalizing",
+  ];
+
   if (processingStates.includes(state)) {
     if (statusBadge) {
       statusBadge.textContent = state.charAt(0).toUpperCase() + state.slice(1);
       statusBadge.className = `status-badge processing ${state}`;
     }
-    
+
     if (label) {
-      switch(state) {
-        case "starting": label.textContent = "Moving to active queue..."; break;
-        case "fetching": label.textContent = "Fetching battle metadata..."; break;
-        case "setup": label.textContent = "Initializing browser instance..."; break;
-        case "preparing": label.textContent = "Configuring replay options..."; break;
-        case "finalizing": label.textContent = "Fixing video metadata (FFmpeg)..."; break;
+      switch (state) {
+        case "starting":
+          label.textContent = "Moving to active queue...";
+          break;
+        case "fetching":
+          label.textContent = "Fetching battle metadata...";
+          break;
+        case "setup":
+          label.textContent = "Initializing browser instance...";
+          break;
+        case "preparing":
+          label.textContent = "Configuring replay options...";
+          break;
+        case "finalizing":
+          label.textContent = "Fixing video metadata (FFmpeg)...";
+          break;
       }
     }
-    
+
     if (progressFill && state !== "finalizing") progressFill.style.width = "5%";
-    if (progressFill && state === "finalizing") progressFill.style.width = "99%";
-  } 
-  else if (state === "recording") {
+    if (progressFill && state === "finalizing")
+      progressFill.style.width = "99%";
+  } else if (state === "recording") {
     if (statusBadge) {
       statusBadge.textContent = "Recording";
       statusBadge.className = "status-badge recording";
@@ -366,6 +405,14 @@ function updateRecordingItem(id, state, meta = {}) {
     if (fileLabel) {
       fileLabel.textContent = `Filename: ${meta.filename}`;
       fileLabel.classList.remove("hidden");
+    }
+
+    // Move badges to top right to make room for filename
+    const badges = document.getElementById(`badges-container-${id}`);
+    const header = document.getElementById(`header-${id}`);
+    if (badges && header) {
+        header.appendChild(badges);
+        badges.style.marginLeft = "auto";
     }
 
     if (actions) {
@@ -395,8 +442,8 @@ function updateRecordingItem(id, state, meta = {}) {
 
   // Ensure close button is only shown at the end
   if (state === "done" || state === "error" || state === "cancelled") {
-      document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
-      document.getElementById(`close-${id}`)?.classList.remove("hidden");
+    document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
+    document.getElementById(`close-${id}`)?.classList.remove("hidden");
   }
 }
 
