@@ -280,8 +280,11 @@ function createRecordingItem(link, id) {
                 </div>
             </div>
         </div>
-        <div class="rec-actions-container">
-            <button class="btn-close" onclick="removeCard('${id}')" title="Remove Card">&times;</button>
+    <div class="rec-actions-container">
+            <div id="cancel-container-${id}">
+                <button class="btn-cancel" onclick="cancelRecording('${id}')" title="Cancel Recording">Cancel</button>
+            </div>
+            <button class="btn-close hidden" id="close-${id}" onclick="removeCard('${id}')" title="Remove Card">&times;</button>
             <div class="rec-actions" id="actions-${id}">
                 <!-- Actions appear on completion -->
             </div>
@@ -289,6 +292,10 @@ function createRecordingItem(link, id) {
     `;
   list.prepend(item);
   recordingData[id] = { link, state: "queued" };
+}
+
+function cancelRecording(id) {
+  socket.emit("cancel-recording", { id });
 }
 
 function updateRecordingItem(id, state, meta = {}) {
@@ -371,6 +378,23 @@ function updateRecordingItem(id, state, meta = {}) {
       statusBadge.className = "status-badge error";
     }
     if (label) label.textContent = "Failed to record";
+    document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
+    document.getElementById(`close-${id}`)?.classList.remove("hidden");
+  } else if (state === "cancelled") {
+    if (statusBadge) {
+      statusBadge.textContent = "Cancelled";
+      statusBadge.className = "status-badge error";
+    }
+    if (label) label.textContent = "Recording aborted.";
+    if (progressFill) progressFill.style.backgroundColor = "#94a3b8";
+    document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
+    document.getElementById(`close-${id}`)?.classList.remove("hidden");
+  }
+
+  // Ensure close button is only shown at the end
+  if (state === "done" || state === "error" || state === "cancelled") {
+      document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
+      document.getElementById(`close-${id}`)?.classList.remove("hidden");
   }
 }
 

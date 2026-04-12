@@ -242,6 +242,7 @@ async function launchOptimizedBrowser(width, height) {
 let globalQueue = [];
 let concurrentCount = 0;
 let activeRecordings = 0;
+const controllers = new Map();
 
 async function triggerNext() {
   const maxConcurrency = parseInt(config.bulk) || 1;
@@ -270,6 +271,9 @@ async function triggerNext() {
         );
       }
 
+      const ctrl = new AbortController();
+      controllers.set(rec.id, ctrl);
+
       await download(
         rec.link,
         rec.id,
@@ -277,10 +281,12 @@ async function triggerNext() {
         config,
         emitLog,
         emitProgress,
+        ctrl.signal,
       );
     } catch (err) {
       emitLog(`[Error] ${err.message}`, "error");
     } finally {
+      controllers.delete(rec.id);
       concurrentCount--;
       activeRecordings--;
       io.emit("status", { ready: true, recording: activeRecordings > 0 });
@@ -436,6 +442,24 @@ io.on("connection", (socket) => {
     saveConfig(config);
     globalQueue.push(...recordings);
     triggerNext();
+  });
+
+  socket.on("cancel-recording", (data) => {
+    const { id } = data;
+    // 1. Check if in global queue
+    const qIdx = globalQueue.findIndex((r) => r.id === id);
+    if (qIdx !== -1) {
+      globalQueue.splice(qIdx, 1);
+      io.emit("progress", { id, state: "cancelled" });
+      return;
+    }
+
+    // 2. Check if active
+    const ctrl = controllers.get(id);
+    if (ctrl) {
+      ctrl.abort();
+      // The recorder catch block will handle signaling the UI
+    }
   });
 });
 
