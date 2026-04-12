@@ -615,6 +615,24 @@ input[type="text"]:hover {
   border-color: #ff6b35;
 }
 
+.btn-cancel {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  border: 1px solid var(--error-color);
+  background: transparent;
+  color: var(--error-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 8px;
+}
+
+.btn-cancel:hover {
+  background: var(--error-color);
+  color: white;
+}
+
 .status-badge {
   font-size: 0.65rem;
   font-weight: 800;

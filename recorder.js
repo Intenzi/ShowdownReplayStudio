@@ -65,10 +65,12 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 /**
  * BROWSER LOGIC: Turn Detection & Victory State
  */
-async function waitUntilVictory(timeout, page, onProgress) {
+async function waitUntilVictory(timeout, page, onProgress, signal) {
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeout) {
+    if (signal?.aborted) return false;
+
     try {
       // Extract current turn number
       const turnNumber = await page.evaluate(`(() => {
@@ -96,7 +98,15 @@ async function waitUntilVictory(timeout, page, onProgress) {
 /**
  * MAIN RECORDING PIPELINE
  */
-async function download(link, id, browser, config, emitLog, emitProgress) {
+async function download(
+  link,
+  id,
+  browser,
+  config,
+  emitLog,
+  emitProgress,
+  signal,
+) {
   const { nochat, nomusic, noaudio, theme, speed, outputFolder } = config;
   let playersLabel = "Unknown Replay";
   const fileId = generateFileId();
@@ -214,8 +224,11 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     updateProgress(0);
 
     // 5. Wait for Conclusion
-    await waitUntilVictory(600000, page, updateProgress);
+    await waitUntilVictory(600000, page, updateProgress, signal);
+    if (signal?.aborted) throw new Error("Recording cancelled.");
+
     await new Promise((resolve) => setTimeout(resolve, 2000)); // Buffer for animations
+    if (signal?.aborted) throw new Error("Recording cancelled.");
 
     // 6. Cleanup Stream
     stream.unpipe(file);
@@ -235,7 +248,7 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     emitLog?.(`🎬 Finalizing metadata: ${playersLabel}...`, "info");
     emitProgress?.(id, link, "finalizing", { players: playersLabel });
     await new Promise((resolve) => setTimeout(resolve, 1000)); // Delay for file handle release on Windows
-    await fixWebmMetadata(tempPath, finalPath);
+    await fixWebmMetadata(tempPath, finalPath, signal);
 
     emitLog?.(`✅ Saved: replay-${fileId}.webm`, "success");
     emitProgress?.(id, link, "done", {
@@ -248,24 +261,31 @@ async function download(link, id, browser, config, emitLog, emitProgress) {
     } catch {}
   } catch (err) {
     try {
-      fs.unlinkSync(tempPath);
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     } catch {}
-    const errorMsg = `[Recorder Error] ${playersLabel || link}: ${err.message}`;
-    emitLog?.(errorMsg, "error");
-    emitProgress?.(id, link, "error");
-    console.error(err);
+
+    if (err.message === "Recording cancelled.") {
+      emitLog?.(`⏹️ Recording cancelled: ${playersLabel || link}`, "info");
+      emitProgress?.(id, link, "cancelled");
+    } else {
+      const errorMsg = `[Recorder Error] ${playersLabel || link}: ${err.message}`;
+      emitLog?.(errorMsg, "error");
+      emitProgress?.(id, link, "error");
+      console.error(err);
+    }
   }
 }
 
 /**
  * FFmpeg: Metadata Repair
  */
-async function fixWebmMetadata(input, output) {
+async function fixWebmMetadata(input, output, signal) {
   // Pre-check if FFmpeg actually works to avoid background crashes in fluent-ffmpeg
   try {
     const { execSync } = require("child_process");
     execSync(`"${ffmpegPath}" -version`, { stdio: "ignore" });
   } catch (err) {
+    if (signal?.aborted) return;
     console.error(
       `[FFmpeg] Pre-check failed for binary: ${ffmpegPath}. Skipping metadata repair.`,
     );
@@ -283,13 +303,19 @@ async function fixWebmMetadata(input, output) {
         .withAudioCodec("copy")
         .output(output)
         .on("start", (cmd) => {
+          if (signal?.aborted) {
+            command.kill();
+            return;
+          }
           console.log(`[FFmpeg] Started command: ${cmd}`);
         })
         .on("end", () => {
-          console.log("[FFmpeg] Processing finished successfully.");
           resolve();
         })
         .on("error", (err, stdout, stderr) => {
+          if (signal?.aborted) {
+            return resolve();
+          }
           console.error("[FFmpeg] Error:", err.message);
           console.error("[FFmpeg] Stderr:", stderr);
           // If FFmpeg fails, we still want to "succeed" by just using the raw file
@@ -302,8 +328,17 @@ async function fixWebmMetadata(input, output) {
           }
         });
 
+      if (signal) {
+        signal.addEventListener("abort", () => {
+          try {
+            command.kill();
+          } catch {}
+        });
+      }
+
       command.run();
     } catch (err) {
+      if (signal?.aborted) return resolve();
       console.error(
         "[FFmpeg] Synchronous error launching FFmpeg:",
         err.message,
