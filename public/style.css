@@ -278,16 +278,18 @@ textarea#links {
   border-radius: var(--radius-md);
   background-color: var(--bg-color);
   color: var(--text-main);
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
   font-size: 0.85rem;
-  resize: none;
-  transition: all 0.2s;
+  resize: vertical;
+  transition: border-color 0.2s;
+  white-space: pre;
+  overflow-x: auto;
+  word-wrap: normal;
 }
 
 textarea#links:focus {
   border-color: var(--primary-color);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(62, 136, 199, 0.15);
 }
 
 .folder-path {
