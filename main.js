@@ -245,7 +245,7 @@ let activeRecordings = 0;
 const controllers = new Map();
 
 async function triggerNext() {
-  const maxConcurrency = parseInt(config.bulk) || 1;
+  const maxConcurrency = config.bulk === "all" ? 99 : (parseInt(config.bulk) || 1);
   if (concurrentCount >= maxConcurrency || globalQueue.length === 0) return;
 
   const rec = globalQueue.shift();
@@ -322,6 +322,7 @@ app.get("/api/config", (req, res) => res.json(config));
 app.post("/api/config", (req, res) => {
   config = { ...config, ...req.body };
   saveConfig(config);
+  triggerNext(); // Pick up bulk changes immediately
   res.json({ ok: true });
 });
 

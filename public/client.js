@@ -120,6 +120,24 @@ function setChat(mode) {
   updateConfig();
 }
 
+function changeBulk(delta) {
+  const input = document.getElementById("bulk");
+  if (!input) return;
+
+  let currentStr = input.value;
+  let currentNum = currentStr === "all" ? 11 : parseInt(currentStr) || 1;
+  let next = currentNum + delta;
+
+  if (next < 1) next = 1;
+  if (next > 10) {
+    input.value = "all";
+  } else {
+    input.value = next;
+  }
+  
+  updateConfig();
+}
+
 function updateConfig() {
   const newConfig = {
     speed: document.getElementById("speed")?.value,
@@ -260,8 +278,8 @@ function startRecording() {
 function createRecordingItem(link, id, config = {}) {
   if (document.getElementById(`rec-${id}`)) return;
 
-  const list = document.getElementById("recordingList");
-  if (!list) return;
+  const queueList = document.getElementById("queueList");
+  if (!queueList) return;
 
   // Generate badges for settings
   let badgesHtml = "";
@@ -312,8 +330,9 @@ function createRecordingItem(link, id, config = {}) {
             </div>
         </div>
     `;
-  list.prepend(item);
+  queueList.prepend(item);
   recordingData[id] = { link, state: "queued" };
+  updateSectionVisibility();
 }
 
 function cancelRecording(id) {
@@ -323,6 +342,29 @@ function cancelRecording(id) {
 function updateRecordingItem(id, state, meta = {}) {
   const data = recordingData[id];
   if (!data) return;
+
+  // Sync internal state
+  data.state = state;
+
+  // Move between lists if necessary
+  const item = document.getElementById(`rec-${id}`);
+  const activeList = document.getElementById("activeList");
+  const finishedList = document.getElementById("finishedList");
+  const queueList = document.getElementById("queueList");
+
+  if (item) {
+    if (state === "starting" || state === "recording" || state === "finalizing") {
+      if (item.parentElement !== activeList) {
+        activeList.prepend(item);
+        updateSectionVisibility();
+      }
+    } else if (state === "done" || state === "error" || state === "cancelled") {
+      if (item.parentElement !== finishedList) {
+        finishedList.prepend(item);
+        updateSectionVisibility();
+      }
+    }
+  }
 
   const statusBadge = document.getElementById(`status-${id}`);
   const progressFill = document.getElementById(`progress-${id}`);
@@ -445,6 +487,8 @@ function updateRecordingItem(id, state, meta = {}) {
     document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
     document.getElementById(`close-${id}`)?.classList.remove("hidden");
   }
+
+  updateSectionVisibility();
 }
 
 /**
@@ -479,21 +523,84 @@ function removeCard(id) {
   const card = document.getElementById(`rec-${id}`);
   if (card) card.remove();
   delete recordingData[id];
+  updateSectionVisibility();
 }
 
 function clearAll() {
-  const list = document.getElementById("recordingList");
-  if (list) {
-    list.innerHTML = `
-            <div class="empty-state" id="emptyState">
-                <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2v20M2 12h20" />
-                </svg>
-                <p>No active recordings. Paste some links and hit "Start Recording" to begin.</p>
-            </div>
-        `;
-  }
-  recordingData = {};
+    if (!confirm("STOP ALL RECORDINGS? This will terminate all currently active processes and clean your workspace. This action cannot be undone.")) return;
+    
+    // We must cancel everything first to stop background processes
+    const allIds = Object.keys(recordingData);
+    allIds.forEach(id => {
+        const data = recordingData[id];
+        if (data.state !== 'done' && data.state !== 'error' && data.state !== 'cancelled') {
+            cancelRecording(id);
+        }
+    });
+
+    const activeList = document.getElementById("activeList");
+    const queueList = document.getElementById("queueList");
+    if (activeList) activeList.innerHTML = "";
+    if (queueList) queueList.innerHTML = "";
+    
+    recordingData = {};
+    updateSectionVisibility();
+}
+
+function clearQueue() {
+    const queueList = document.getElementById("queueList");
+    if (!queueList) return;
+    
+    // We must send cancellation to server for EVERY queued item 
+    // or the background processing will still pick them up!
+    const children = Array.from(queueList.children);
+    children.forEach(child => {
+        const id = child.id.replace('rec-', '');
+        cancelRecording(id);
+    });
+
+    queueList.innerHTML = "";
+    updateSectionVisibility();
+}
+
+function clearFinished() {
+    const finishedList = document.getElementById("finishedList");
+    if (!finishedList) return;
+    
+    const children = Array.from(finishedList.children);
+    children.forEach(child => {
+        const id = child.id.replace('rec-', '');
+        removeCard(id);
+    });
+}
+
+function updateSectionVisibility() {
+    const activeList = document.getElementById("activeList");
+    const queueList = document.getElementById("queueList");
+    const finishedList = document.getElementById("finishedList");
+
+    const activeSection = document.getElementById("activeSection");
+    const queueSection = document.getElementById("queueSection");
+    const finishedSection = document.getElementById("finishedSection");
+    
+    const emptyState = document.getElementById("emptyState");
+    const badge = document.getElementById("recordCountBadge");
+
+    const activeCount = activeList?.children.length || 0;
+    const queueCount = queueList?.children.length || 0;
+    const finishedCount = finishedList?.children.length || 0;
+    const total = activeCount + queueCount + finishedCount;
+
+    if (activeSection) activeSection.classList.toggle("hidden", activeCount === 0);
+    if (queueSection) queueSection.classList.toggle("hidden", queueCount === 0);
+    if (finishedSection) finishedSection.classList.toggle("hidden", finishedCount === 0);
+    
+    if (emptyState) emptyState.classList.toggle("hidden", total > 0);
+    
+    if (badge) {
+        badge.textContent = total;
+        badge.classList.toggle("hidden", total === 0);
+    }
 }
 
 function toggleDarkTheme() {
