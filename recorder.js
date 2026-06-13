@@ -160,7 +160,17 @@ async function download(
     // Inject UI cleaning styles
     await page.addStyleTag({
       content: `
-        header, .replay-controls, #LeaderboardBTF, .fc-consent-root { display: none !important; }
+        header, .replay-controls, #LeaderboardBTF { display: none !important; }
+
+        /* Blast the consent popups out of existence visually and behaviorally */
+        .fc-consent-root, .fc-ab-root, .google-fc-monetization-dialog {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
+
         .bar-wrapper { margin: 0 !important; }
         .battle { top: 0 !important; left: 0 !important; ${nochat ? "margin: 0 !important;" : ""} }
         .battle-log { top: 0 !important; left: 641px !important; ${nochat ? "display: none !important;" : ""} }
