@@ -27,10 +27,10 @@ const RESOURCES_DIR = path.join(LINUX_PORTABLE_DIR, "resources");
 fs.mkdirSync(LINUX_PORTABLE_DIR, { recursive: true });
 fs.mkdirSync(RESOURCES_DIR, { recursive: true });
 
-// 3. Copy Binary
-console.log("📦 Copying executable...");
+// 3. Move Binary
+console.log("📦 Packaging executable...");
 const destBinary = path.join(LINUX_PORTABLE_DIR, "showdown-replay-studio");
-fs.copyFileSync(binaryPath, destBinary);
+fs.renameSync(binaryPath, destBinary);
 fs.chmodSync(destBinary, 0o755);
 
 // 4. Bundle Required Dependencies

@@ -29,9 +29,9 @@ const RESOURCES_DIR = path.join(WIN_PORTABLE_DIR, "resources");
 fs.mkdirSync(WIN_PORTABLE_DIR, { recursive: true });
 fs.mkdirSync(RESOURCES_DIR, { recursive: true });
 
-// 3. Copy Binary
-console.log("📦 Copying executable...");
-fs.copyFileSync(
+// 3. Move Binary
+console.log("📦 Packaging executable...");
+fs.renameSync(
   binaryPath,
   path.join(WIN_PORTABLE_DIR, "Showdown Replay Studio.exe"),
 );
