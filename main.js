@@ -246,11 +246,12 @@ const controllers = new Map();
 
 async function triggerNext() {
   const maxConcurrency = config.bulk === "all" ? 99 : (parseInt(config.bulk) || 1);
-  if (concurrentCount >= maxConcurrency || globalQueue.length === 0) return;
 
-  const rec = globalQueue.shift();
-  concurrentCount++;
-  activeRecordings++;
+  // Use a while loop to fill up all available slots immediately
+  while (concurrentCount < maxConcurrency && globalQueue.length > 0) {
+    const rec = globalQueue.shift();
+    concurrentCount++;
+    activeRecordings++;
 
   io.emit("status", { ready: true, recording: true });
 
@@ -296,14 +297,17 @@ async function triggerNext() {
       }
       triggerNext();
     }
-  })();
-
-  triggerNext(); // Support filling all available slots
+  })(); // End of async IIFE
+  } // End of while loop
 }
 
 /**
- * SERVER SETUP
+ * EXPRESS & SOCKET.IO SETUP
  */
+function generateFileId() {
+  return Math.random().toString(36).substring(2, 11);
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -313,20 +317,32 @@ const io = new Server(server, {
   },
 });
 
-app.use(express.json());
+// Serve recorded videos dynamically from the current configuration folder
+app.use("/videos", (req, res) => {
+  const filePath = path.join(config.outputFolder, decodeURIComponent(req.path));
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).send("Video not found");
+  }
+});
+
 app.use(express.static(path.join(__dirname, "public")));
-app.use("/videos", express.static(config.outputFolder));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // API: Configuration
 app.get("/api/config", (req, res) => res.json(config));
+
 app.post("/api/config", (req, res) => {
   config = { ...config, ...req.body };
   saveConfig(config);
-  triggerNext(); // Pick up bulk changes immediately
-  res.json({ ok: true });
+  // Real-time bulk limit application
+  triggerNext();
+  res.json({ success: true, config });
 });
 
-// API: System
+// Version API
 app.get("/api/version", async (req, res) => {
   try {
     const response = await fetch(
@@ -341,160 +357,212 @@ app.get("/api/version", async (req, res) => {
   }
 });
 
+// Status API
 app.get("/api/status", (req, res) => {
   const isReady = fs.existsSync(CONFIG_PATH);
   res.json({ ready: isReady, recording: activeRecordings > 0 });
 });
 
-// API: File Management
-app.get("/api/open-video/:filename", (req, res) => {
-  const filePath = path.join(config.outputFolder, req.params.filename);
-  if (fs.existsSync(filePath)) {
-    open(filePath);
-    res.json({ ok: true });
-  } else {
-    res.status(404).json({ error: "File not found" });
-  }
-});
-
-app.post("/api/open-folder", (req, res) => {
-  if (fs.existsSync(config.outputFolder)) {
-    open(config.outputFolder);
-    res.json({ ok: true });
-  } else {
-    res.status(404).json({ error: "Folder not found" });
-  }
-});
-
-app.post("/api/rename", (req, res) => {
-  const { oldName, newName } = req.body;
-  const oldPath = path.join(config.outputFolder, oldName);
-  const finalNewName = newName.endsWith(".webm") ? newName : `${newName}.webm`;
-  const newPath = path.join(config.outputFolder, finalNewName);
-
-  if (fs.existsSync(oldPath)) {
-    try {
-      fs.renameSync(oldPath, newPath);
-      res.json({ ok: true, filename: finalNewName });
-    } catch (err) {
-      res.status(500).json({ error: "Rename failed" });
-    }
-  } else {
-    res.status(404).json({ error: "File not found" });
-  }
-});
-
-app.post("/api/pick-folder", async (req, res) => {
+// Directory Browser / Folder Picker
+const pickFolderHandler = async (req, res) => {
   try {
-    let folder = null;
-    if (process.platform === "win32") {
-      const ps =
-        "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.ShowDialog() | Out-Null; $f.SelectedPath";
-      folder = execSync(`powershell -command "${ps}"`, {
-        encoding: "utf8",
-      }).trim();
-    } else if (process.platform === "darwin") {
-      folder = execSync(
-        `osascript -e 'POSIX path of (choose folder with prompt "Select output folder")'`,
-        { encoding: "utf8" },
-      ).trim();
-    } else {
-      folder = execSync("zenity --file-selection --directory 2>/dev/null", {
-        encoding: "utf8",
-      }).trim();
-    }
+    const { exec } = require("child_process");
+    if (os.platform() === "darwin") {
+      const script = `osascript -e 'POSIX path of (choose folder with prompt "Select Output Folder")'`;
+      exec(script, (err, stdout) => {
+        if (err || !stdout) return res.json({ success: false });
+        const finalPath = stdout.trim();
+        if (!finalPath) return res.json({ success: false });
 
-    if (folder) {
-      config.outputFolder = folder;
-      // Note: We don't save immediately here to allow 'setup' to handle the final save
-      res.json({ folder });
+        config.outputFolder = finalPath;
+        saveConfig(config);
+
+        res.json({ success: true, folder: finalPath, path: finalPath });
+      });
+    } else if (os.platform() === "win32") {
+      const script =
+        'powershell.exe -NoProfile -Command "& { $f = New-Object System.Windows.Forms.FolderBrowserDialog; if($f.ShowDialog() -eq \'OK\') { $f.SelectedPath } }"';
+      exec(script, (err, stdout) => {
+        if (err || !stdout) return res.json({ success: false });
+        const finalPath = stdout.trim();
+        if (!finalPath) return res.json({ success: false });
+
+        config.outputFolder = finalPath;
+        saveConfig(config);
+
+        res.json({ success: true, folder: finalPath, path: finalPath });
+      });
     } else {
-      res.json({ folder: null });
+      res.json({ success: false, message: "Manual path required on Linux" });
     }
-  } catch {
-    res.json({ folder: null });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+};
+
+app.get("/api/browse", pickFolderHandler);
+app.get("/api/pick-folder", pickFolderHandler);
+app.post("/api/pick-folder", pickFolderHandler);
+
+// Open Record Folder
+app.post("/api/open-folder", (req, res) => {
+  // Safety check for req.body to prevent TypeErrors
+  const target = (req.body && req.body.path) || config.outputFolder;
+  if (fs.existsSync(target)) {
+    open(target);
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, error: "Folder does not exist" });
   }
 });
 
-app.post("/api/quit", (req, res) => {
-  res.json({ ok: true });
-  setTimeout(() => {
-    console.log("[System] Shutting down application...");
-    process.exit(0);
-  }, 500);
+// Rename Video API
+app.post("/api/rename", (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+    if (!oldName || !newName) {
+      return res.json({ ok: false, error: "Missing parameters" });
+    }
+
+    const cleanNewName = newName.replace(/[/\\?%*:|"<>]/g, "-");
+    const oldPath = path.join(config.outputFolder, oldName);
+    const newFilename = cleanNewName.endsWith(".webm") ? cleanNewName : `${cleanNewName}.webm`;
+    const newPath = path.join(config.outputFolder, newFilename);
+
+    if (!fs.existsSync(oldPath)) {
+      return res.json({ ok: false, error: "Source file not found" });
+    }
+
+    if (fs.existsSync(newPath)) {
+      return res.json({ ok: false, error: "Destination file already exists" });
+    }
+
+    fs.renameSync(oldPath, newPath);
+    res.json({ ok: true, filename: newFilename });
+  } catch (err) {
+    res.json({ ok: false, error: err.message });
+  }
 });
 
-/**
- * SOCKET.IO COMMUNICATION
- */
+// Quit App API
+app.post("/api/quit", (req, res) => {
+  res.json({ success: true });
+  console.log("[System] Shutdown requested via API. Cleaning up...");
+
+  for (const type of ["nochat", "chat"]) {
+    if (browsers[type]) {
+      try {
+        browsers[type].close();
+      } catch (err) {}
+    }
+  }
+
+  for (const ctrl of controllers.values()) {
+    try {
+      ctrl.abort();
+    } catch (err) {}
+  }
+
+  setTimeout(() => {
+    process.exit(0);
+  }, 1000);
+});
+
+// Socket Events
 io.on("connection", (socket) => {
+  console.log("[Socket] Client connected");
+
   const isReady = fs.existsSync(CONFIG_PATH);
   socket.emit("status", { ready: isReady, recording: activeRecordings > 0 });
 
-  socket.on("setup", () => {
-    console.log("[Setup] Finalizing first-time configuration...");
-    saveConfig(config); // This creates the config.json file
-    socket.emit("setup-done");
-    io.emit("status", { ready: true, recording: activeRecordings > 0 });
+  socket.on("setup", async () => {
+    try {
+      socket.emit("log", { msg: "⚙️ Starting environment validation...", type: "info" });
+
+      // Ensure output directory exists
+      if (!fs.existsSync(config.outputFolder)) {
+        fs.mkdirSync(config.outputFolder, { recursive: true });
+      }
+
+      // Check browser
+      const type = config.nochat ? "nochat" : "chat";
+      if (!browsers[type] || !browsers[type].isConnected()) {
+        socket.emit("log", { msg: "🌐 Launching headless browser...", type: "info" });
+        browsers[type] = await launchOptimizedBrowser(
+          config.nochat ? 642 : 1100,
+          450,
+        );
+      }
+
+      socket.emit("log", { msg: "✅ Environment ready!", type: "success" });
+      socket.emit("setup-done");
+      io.emit("status", { ready: true, recording: activeRecordings > 0 });
+    } catch (err) {
+      socket.emit("log", { msg: `❌ Setup failed: ${err.message}`, type: "error" });
+    }
   });
 
-  socket.on("record", async ({ recordings, recordConfig }) => {
-    config = { ...config, ...recordConfig };
-    saveConfig(config);
-    globalQueue.push(...recordings);
+  socket.on("record", ({ recordings, recordConfig }) => {
+    if (recordConfig) {
+      config = { ...config, ...recordConfig };
+      saveConfig(config);
+    }
+
+    recordings.forEach(({ id, link }) => {
+      globalQueue.push({ id, link });
+      socket.emit("log", { msg: `📝 Added to queue: ${link}`, type: "info" });
+    });
+    triggerNext();
+  });
+
+  socket.on("add-to-queue", (links) => {
+    links.forEach((link) => {
+      const id = generateFileId();
+      globalQueue.push({ id, link });
+      socket.emit("log", { msg: `📝 Added to queue: ${link}`, type: "info" });
+    });
     triggerNext();
   });
 
   socket.on("cancel-recording", (data) => {
-    const { id } = data;
-    // 1. Check if in global queue
-    const qIdx = globalQueue.findIndex((r) => r.id === id);
-    if (qIdx !== -1) {
-      globalQueue.splice(qIdx, 1);
-      io.emit("progress", { id, state: "cancelled" });
+    const id = typeof data === "object" && data !== null ? data.id : data;
+    if (!id) return;
+
+    // 1. Check if it's in queue
+    const queueIdx = globalQueue.findIndex((r) => r.id === id);
+    if (queueIdx > -1) {
+      globalQueue.splice(queueIdx, 1);
+      socket.emit("log", { msg: `🚫 Cancelled from queue: ${id}`, type: "warn" });
       return;
     }
 
-    // 2. Check if active
-    const ctrl = controllers.get(id);
-    if (ctrl) {
-      ctrl.abort();
-      // The recorder catch block will handle signaling the UI
+    // 2. Check if it's active
+    if (controllers.has(id)) {
+      controllers.get(id).abort();
+      socket.emit("log", { msg: `🛑 Stopping active recording: ${id}`, type: "warn" });
     }
+  });
+
+  socket.on("clear-queue", () => {
+    globalQueue = [];
+    socket.emit("log", { msg: "🧹 All pending items cleared.", type: "warn" });
   });
 });
 
-/**
- * START APPLICATION
- */
-server.listen(APP_PORT, "0.0.0.0", async () => {
-  console.log(
-    `[Server] Showdown Replay Studio starting on http://localhost:${APP_PORT}`,
-  );
+// START
+server.listen(APP_PORT, "0.0.0.0", () => {
+  console.log(`[Server] Showdown Replay Studio starting on http://localhost:${APP_PORT}`);
 
-  try {
-    console.log("[System] Initializing background browsers...");
+  // Auto-open browser in dev/start
+  open(`http://localhost:${APP_PORT}`);
 
-    // Integrity check for bundled environments
-    const isBundled = process.pkg;
-    if (isBundled && !bundledExecutablePath) {
-      console.warn(
-        "⚠️ [Warning] Bundled Chromium not found in 'resources' or sibling directory.",
-      );
-      console.warn(
-        "👉 Please ensure you haven't moved the EXE away from its 'resources' folder.",
-      );
-    }
-
-    browsers.nochat = await launchOptimizedBrowser(642, 450);
-    browsers.chat = await launchOptimizedBrowser(1100, 450);
+  console.log("[System] Initializing background browsers...");
+  launchOptimizedBrowser(642, 450).then(b => {
+    browsers.nochat = b;
     console.log("[System] Application ready.");
-  } catch (err) {
+  }).catch(err => {
     console.error(`[Error] critical initialization failure: ${err.message}`);
-    console.error(err.stack); // More detail
-  }
-
-  await open(`http://localhost:${APP_PORT}`);
+  });
 });
 
 /**
@@ -514,7 +582,6 @@ process.on("unhandledRejection", (reason, promise) => {
     "reason:",
     reason,
   );
-  // Check if reason is an Error object
   if (reason instanceof Error) {
     console.error(reason.stack);
   }
