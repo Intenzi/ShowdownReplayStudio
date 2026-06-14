@@ -80,9 +80,11 @@ async function waitUntilVictory(timeout, page, onProgress, signal) {
 
       // Detect "won the battle!" message in the history
       const victory = await page.evaluate(`(() => {
-        const logs = document.querySelectorAll("div.battle-history");
+        const activeLog = document.querySelector("div.battle-log");
+        if (!activeLog) return false;
+        const logs = activeLog.querySelectorAll("div.battle-history");
         if (logs.length === 0) return false;
-        return logs[logs.length - 1].textContent.endsWith(" won the battle!");
+        return logs[logs.length - 1].textContent.trim().endsWith(" won the battle!");
       })()`);
 
       if (onProgress) onProgress(turnNumber);
@@ -116,7 +118,8 @@ async function download(
   // 1. Validation
   const isValidLink =
     link.startsWith("https://replay.pokemonshowdown.com/") ||
-    link.startsWith("http://replay.pokemonshowdown.com/");
+    link.startsWith("http://replay.pokemonshowdown.com/") ||
+    link.startsWith("file://");
 
   if (!isValidLink) {
     const errorMsg = `[Recorder] Invalid Showdown link: ${link}`;
@@ -127,12 +130,42 @@ async function download(
   try {
     // 2. Fetch Metadata
     emitProgress?.(id, link, "fetching");
-    const requestLink = link.split("?")[0].replace(/\/$/, "");
-    const response = await fetch(`${requestLink}.json`);
-    if (!response.ok)
-      throw new Error(`Could not fetch replay data from ${requestLink}.json`);
+    let data;
+    if (link.startsWith("file://")) {
+      const localFilePath = link.replace(/^file:\/\//, "");
+      const content = fs.readFileSync(localFilePath, "utf8");
 
-    const data = await response.json();
+      const scriptMatch = content.match(/<script[^>]*class="battle-log-data"[^>]*>([\s\S]*?)<\/script>/i);
+      if (!scriptMatch) {
+        throw new Error("Invalid local HTML: Missing battle-log-data script element");
+      }
+
+      const logText = scriptMatch[1].trim();
+
+      let format = "Unknown Format";
+      const tierMatch = logText.match(/\n\|tier\|([^\n|]+)/) || logText.match(/\n\|format\|([^\n|]+)/);
+      if (tierMatch) format = tierMatch[1].trim();
+
+      let p1 = "Player 1";
+      let p2 = "Player 2";
+      const p1Match = logText.match(/\n\|player\|p1\|([^\n|]+)/);
+      const p2Match = logText.match(/\n\|player\|p2\|([^\n|]+)/);
+      if (p1Match) p1 = p1Match[1].trim();
+      if (p2Match) p2 = p2Match[1].trim();
+
+      data = {
+        players: [p1, p2],
+        format: format,
+        log: logText
+      };
+    } else {
+      const requestLink = link.split("?")[0].replace(/\/$/, "");
+      const response = await fetch(`${requestLink}.json`);
+      if (!response.ok)
+        throw new Error(`Could not fetch replay data from ${requestLink}.json`);
+      data = await response.json();
+    }
+
     const matches = Array.from(data.log.matchAll(/\n\|turn\|(\d+)\n/g));
     const totalTurns =
       matches.length > 0 ? parseInt(matches[matches.length - 1][1]) : 0;
@@ -172,6 +205,10 @@ async function download(
         .bar-wrapper { margin: 0 !important; }
         .battle { top: 0 !important; left: 0 !important; ${nochat ? "margin: 0 !important;" : ""} }
         .battle-log { top: 0 !important; left: 641px !important; ${nochat ? "display: none !important;" : ""} }
+
+        /* For local replays */
+        .replay-wrapper { margin: 0 !important; }
+        body { padding: 0 !important; }
       `,
     });
 
@@ -188,10 +225,50 @@ async function download(
     await page.waitForSelector(".playbutton");
 
     // Apply User Preferences
-    if (speed !== "normal") await page.select('select[name="speed"]', speed);
-    if (nomusic) await page.select('select[name="sound"]', "musicoff");
-    else if (noaudio) await page.select('select[name="sound"]', "off");
-    if (theme !== "auto") await page.select('select[name="darkmode"]', theme);
+    const isLocal = link.startsWith("file://");
+    await page.evaluate(({ isLocal, speed, nomusic, noaudio, theme }) => {
+      if (isLocal) {
+        // 1. Playback Speed
+        if (speed !== "normal") {
+          const speedBtn = document.querySelector(`.speedchooser button[value="${speed}"]`) || 
+                           document.querySelector(`button[value="${speed}"]`);
+          if (speedBtn) speedBtn.click();
+        }
+
+        // 2. Sound Settings (Only supports "on" / "off" buttons under soundchooser)
+        if (nomusic || noaudio) {
+          const muteBtn = document.querySelector(`.soundchooser button[value="off"]`) || 
+                          document.querySelector(`button[value="off"]`);
+          if (muteBtn) muteBtn.click();
+        } else {
+          const unmuteBtn = document.querySelector(`.soundchooser button[value="on"]`) || 
+                            document.querySelector(`button[value="on"]`);
+          if (unmuteBtn) unmuteBtn.click();
+        }
+
+        // 3. Visual Theme
+        if (theme !== "auto") {
+          const themeBtn = document.querySelector(`.colorchooser button[value="${theme}"]`) || 
+                           document.querySelector(`button[value="${theme}"]`);
+          if (themeBtn) themeBtn.click();
+        }
+      } else {
+        const setSelect = (selector, value) => {
+          const selectEl = document.querySelector(selector);
+          if (selectEl) {
+            selectEl.value = value;
+            selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+            return true;
+          }
+          return false;
+        };
+
+        if (speed !== "normal") setSelect('select[name="speed"]', speed);
+        if (nomusic) setSelect('select[name="sound"]', "musicoff");
+        else if (noaudio) setSelect('select[name="sound"]', "off");
+        if (theme !== "auto") setSelect('select[name="darkmode"]', theme);
+      }
+    }, { isLocal, speed, nomusic, noaudio, theme });
 
     // Final check for blocker right before click
     await page.evaluate(() =>
@@ -207,7 +284,14 @@ async function download(
       mimeType: "video/webm;codecs=vp9",
     });
 
-    await page.click('button[name="play"]');
+    try {
+      await page.click('button[name="play"]');
+    } catch (err) {
+      // Ignore if play button selector does not exist or is named differently in offline HTML
+      if (!isLocal) {
+        throw err;
+      }
+    }
     stream.pipe(file);
 
     const estTime = ((totalTurns * 7) / 60).toFixed(1);

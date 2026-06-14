@@ -96,14 +96,35 @@
     <main>
         <!-- Sidebar -->
         <aside class="sidebar" aria-label="Recording configuration">
-            <section class="field">
-                <span class="section-label">Replay URLs</span>
-                <textarea id="links"
-                          placeholder="Paste replay links here...&#10;One link per line or comma-separated"
-                          aria-label="Replay links input"
-                          wrap="off"
-                          spellcheck="false"></textarea>
-            </section>
+            <!-- Sidebar Mode Tabs -->
+            <div class="sidebar-tabs" role="tablist">
+                <button class="tab-btn active" id="tab-urls" onclick="switchTab('urls')" role="tab" aria-selected="true" aria-controls="pane-urls">Replay URLs</button>
+                <button class="tab-btn" id="tab-files" onclick="switchTab('files')" role="tab" aria-selected="false" aria-controls="pane-files">Local Files</button>
+            </div>
+
+            <!-- URLs Tab Pane -->
+            <div class="tab-pane" id="pane-urls" role="tabpanel" aria-labelledby="tab-urls">
+                <section class="field">
+                    <span class="section-label">Replay URLs</span>
+                    <textarea id="links"
+                              placeholder="Paste replay links here...&#10;One link per line or comma-separated"
+                              aria-label="Replay links input"
+                              wrap="off"
+                              spellcheck="false"></textarea>
+                </section>
+            </div>
+
+            <!-- Local Files Tab Pane -->
+            <div class="tab-pane hidden" id="pane-files" role="tabpanel" aria-labelledby="tab-files">
+                <section class="field" style="gap: 12px;">
+                    <span class="section-label">HTML Replay Files</span>
+                    <button class="btn-primary" id="btnSelectFiles" onclick="pickLocalFiles()" style="width: 100%; height: 46px; border-radius: var(--radius-sm); font-size: 0.85rem; gap: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span>Select HTML Replays</span>
+                    </button>
+                    <div id="localFilesList" class="local-files-list"></div>
+                </section>
+            </div>
 
             <!-- Output Location moved to Workspace Header -->
 
