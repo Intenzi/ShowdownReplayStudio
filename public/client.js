@@ -270,6 +270,7 @@ function startRecording() {
 
     if (!isValidPrefix) {
       console.warn(`[Validator] Ignored link (invalid domain): ${link}`);
+      showToast(`Invalid Replay URL (wrong domain): ${link.substring(0, 30)}...`, "warning");
       return;
     }
 
@@ -291,10 +292,12 @@ function startRecording() {
           socket.emit("record", { recordings: [{ link, id }], recordConfig });
         } else {
           console.warn(`[Validator] Replay not found (404): ${verifyUrl}`);
+          showToast(`Replay not found (404): ${link.substring(0, 30)}...`, "error");
         }
       } catch (err) {
         // Failed to fetch on an invalid Pokemon Showdown domain link represents a 404
         console.warn(`[Validator] Replay not found or invalid: ${link}`);
+        showToast(`Replay not found or invalid: ${link.substring(0, 30)}...`, "error");
       }
     })();
   });
@@ -744,6 +747,52 @@ async function editRecordingName(id, oldFilename) {
     } catch (err) {
       console.error("Rename failed:", err);
     }
+  }
+}
+
+/**
+ * Toast Notification System
+ */
+function showToast(message, type = "info", duration = 4000) {
+  let container = document.getElementById("toastContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toastContainer";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+
+  let icon = "ℹ️";
+  if (type === "success") icon = "✅";
+  else if (type === "warning") icon = "⚠️";
+  else if (type === "error") icon = "❌";
+
+  toast.innerHTML = `
+    <div class="toast-icon">${icon}</div>
+    <div class="toast-message">${message}</div>
+    <button class="toast-close" aria-label="Close">&times;</button>
+  `;
+
+  container.appendChild(toast);
+
+  // Trigger browser paint
+  setTimeout(() => {
+    toast.classList.add("visible");
+  }, 10);
+
+  const removeToast = () => {
+    toast.classList.remove("visible");
+    toast.addEventListener("transitionend", () => {
+      toast.remove();
+    });
+  };
+
+  toast.querySelector(".toast-close").addEventListener("click", removeToast);
+
+  if (duration > 0) {
+    setTimeout(removeToast, duration);
   }
 }
 
