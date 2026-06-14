@@ -223,7 +223,7 @@ async function launchOptimizedBrowser(width, height) {
       args: [
         `--window-size=${width},${height}`,
         `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-        `--headless=new`,
+        // `--headless=new`,
         `--force-device-scale-factor=1`,
         `--hide-scrollbars`,
         `--disable-notifications`,
@@ -399,6 +399,126 @@ const pickFolderHandler = async (req, res) => {
     res.json({ success: false, error: err.message });
   }
 };
+
+// Local Replay File Picker (Multi-select)
+const pickFileReplayHandler = async (req, res) => {
+  try {
+    const { execFile } = require("child_process");
+
+    if (os.platform() === "darwin") {
+      execFile("osascript", [
+        "-e", 'set selectedFiles to (choose file with prompt "Select Showdown Replay HTML Files" of type {"public.html"} with multiple selections allowed)',
+        "-e", "set pathList to {}",
+        "-e", "repeat with aFile in selectedFiles",
+        "-e", "  copy POSIX path of aFile to end of pathList",
+        "-e", "end repeat",
+        "-e", "set AppleScript's text item delimiters to linefeed",
+        "-e", "pathList as text"
+      ], (err, stdout) => {
+        handleFileSelection(err, stdout, res);
+      });
+    } else if (os.platform() === "win32") {
+      execFile("powershell.exe", [
+        "-NoProfile",
+        "-Command",
+        `& {
+          Add-Type -AssemblyName System.Windows.Forms;
+          $f = New-Object System.Windows.Forms.OpenFileDialog;
+          $f.Filter = 'HTML Files (*.html)|*.html';
+          $f.Multiselect = $true;
+          $f.Title = 'Select Showdown Replay HTML Files';
+          if($f.ShowDialog() -eq 'OK') {
+              $f.FileNames
+          }
+        }`
+      ], (err, stdout) => {
+        handleFileSelection(err, stdout, res);
+      });
+    } else {
+      // Linux zenity
+      execFile("zenity", [
+        "--file-selection",
+        "--multiple",
+        "--file-filter=*.html",
+        "--title=Select Showdown Replay HTML Files"
+      ], (err, stdout) => {
+        // Zenity outputs paths separated by "|"
+        handleFileSelection(err, stdout ? stdout.replace(/\|/g, "\n") : stdout, res);
+      });
+    }
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+};
+
+const handleFileSelection = (err, stdout, res) => {
+  if (err || !stdout) {
+    return res.json({ success: false, error: "No files selected" });
+  }
+
+  const filePaths = stdout.trim().split(/\r?\n/).map(p => p.trim()).filter(Boolean);
+  if (filePaths.length === 0) {
+    return res.json({ success: false, error: "No files selected" });
+  }
+
+  const results = [];
+  const ignored = [];
+
+  for (const filePath of filePaths) {
+    if (!fs.existsSync(filePath)) continue;
+
+    try {
+      const content = fs.readFileSync(filePath, "utf8");
+
+      // Parse battle log from <script type="text/plain" class="battle-log-data"> or similar
+      const scriptMatch = content.match(/<script[^>]*class="battle-log-data"[^>]*>([\s\S]*?)<\/script>/i);
+      if (!scriptMatch) {
+        ignored.push(path.basename(filePath));
+        continue;
+      }
+
+      const logText = scriptMatch[1].trim();
+      const hasPlayers = logText.includes("|player|p1|") && logText.includes("|player|p2|");
+      if (!hasPlayers) {
+        ignored.push(path.basename(filePath));
+        continue;
+      }
+
+      // Metadata Parsing
+      let format = "Unknown Format";
+      const tierMatch = logText.match(/\n\|tier\|([^\n|]+)/) || logText.match(/\n\|format\|([^\n|]+)/);
+      if (tierMatch) format = tierMatch[1].trim();
+
+      let p1 = "Player 1";
+      let p2 = "Player 2";
+      const p1Match = logText.match(/\n\|player\|p1\|([^\n|]+)/);
+      const p2Match = logText.match(/\n\|player\|p2\|([^\n|]+)/);
+      if (p1Match) p1 = p1Match[1].trim();
+      if (p2Match) p2 = p2Match[1].trim();
+
+      const turnMatches = Array.from(logText.matchAll(/\n\|turn\|(\d+)/g));
+      const totalTurns = turnMatches.length > 0 ? parseInt(turnMatches[turnMatches.length - 1][1]) : 0;
+
+      results.push({
+        path: `file://${filePath}`,
+        name: path.basename(filePath),
+        players: `${p1} vs ${p2}`,
+        format,
+        totalTurns
+      });
+    } catch (e) {
+      ignored.push(path.basename(filePath));
+    }
+  }
+
+  res.json({
+    success: true,
+    files: results,
+    ignored: ignored.length > 0 ? ignored : null
+  });
+};
+
+app.post("/api/pick-file-replay", pickFileReplayHandler);
 
 app.get("/api/browse", pickFolderHandler);
 app.get("/api/pick-folder", pickFolderHandler);

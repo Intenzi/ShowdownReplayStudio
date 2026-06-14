@@ -243,12 +243,93 @@ function startSetup() {
   processStep();
 }
 
-function startRecording() {
-  const input = document.getElementById("links");
-  const linksText = input?.value.trim();
-  if (!linksText) return;
+let activeTab = "urls";
+let selectedLocalFiles = [];
 
-  const links = linksText.split(/[\s,]+/).filter(Boolean);
+function switchTab(tabId) {
+  activeTab = tabId;
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.id === `tab-${tabId}`);
+    btn.setAttribute("aria-selected", btn.id === `tab-${tabId}`);
+  });
+  document.querySelectorAll(".tab-pane").forEach(pane => {
+    pane.classList.toggle("hidden", pane.id !== `pane-${tabId}`);
+  });
+
+  const noMusicBtn = document.getElementById("segment-audio-nomusic");
+  if (noMusicBtn) {
+    if (tabId === "files") {
+      noMusicBtn.classList.add("hidden");
+      if (audioMode === "nomusic") {
+        setAudio("noaudio");
+      }
+    } else {
+      noMusicBtn.classList.remove("hidden");
+    }
+  }
+
+  const btn = document.getElementById("btnRecord");
+  if (btn) {
+    if (tabId === "files") {
+      btn.querySelector("span").textContent = "Record Local Files";
+    } else {
+      btn.querySelector("span").textContent = "Start Recording";
+    }
+  }
+}
+
+async function pickLocalFiles() {
+  try {
+    const btn = document.getElementById("btnSelectFiles");
+    if (btn) btn.disabled = true;
+
+    const res = await fetch("/api/pick-file-replay", { method: "POST" });
+    const data = await res.json();
+
+    if (btn) btn.disabled = false;
+
+    if (!data.success) {
+      if (data.error && data.error !== "No files selected") {
+        showToast(data.error, "error");
+      }
+      return;
+    }
+
+    selectedLocalFiles = data.files || [];
+
+    const listEl = document.getElementById("localFilesList");
+    if (listEl) {
+      if (selectedLocalFiles.length === 0) {
+        listEl.innerHTML = "";
+      } else {
+        listEl.innerHTML = selectedLocalFiles.map(file => `
+          <div class="local-file-item">
+            <div class="local-file-title" title="${file.name}">${file.name}</div>
+            <div class="local-file-meta">
+              <span>${file.players}</span>
+              <span>${file.totalTurns} turns</span>
+            </div>
+          </div>
+        `).join("");
+      }
+    }
+
+    if (data.ignored && data.ignored.length > 0) {
+      showToast(`Skipped ${data.ignored.length} invalid file(s).`, "warning");
+    }
+
+    if (selectedLocalFiles.length > 0) {
+      showToast(`Loaded ${selectedLocalFiles.length} valid replay file(s).`, "success");
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Failed to select files.", "error");
+    const btn = document.getElementById("btnSelectFiles");
+    if (btn) btn.disabled = false;
+  }
+}
+
+function startRecording() {
   const currentSpeed = document.getElementById("speed")?.value;
   const recordConfig = {
     speed: currentSpeed,
@@ -258,6 +339,37 @@ function startRecording() {
     noaudio: audioMode === "noaudio",
     nochat: chatMode === "hide",
   };
+
+  if (activeTab === "files") {
+    if (selectedLocalFiles.length === 0) {
+      showToast("Please select some HTML replay files first.", "warning");
+      return;
+    }
+
+    // Clear empty state
+    const emptyState = document.getElementById("emptyState");
+    if (emptyState) emptyState.style.display = "none";
+
+    selectedLocalFiles.forEach((file) => {
+      const id = Math.random().toString(36).substring(2, 11);
+      createRecordingItem(file.name, id, { audioMode, chatMode, speed: currentSpeed });
+      socket.emit("record", { recordings: [{ link: file.path, id }], recordConfig });
+    });
+
+    // Reset selection
+    selectedLocalFiles = [];
+    const listEl = document.getElementById("localFilesList");
+    if (listEl) listEl.innerHTML = "";
+
+    showToast("Queued local replay files.", "success");
+    return;
+  }
+
+  const input = document.getElementById("links");
+  const linksText = input?.value.trim();
+  if (!linksText) return;
+
+  const links = linksText.split(/[\s,]+/).filter(Boolean);
 
   // Clear the input field for next batch of recordings immediately
   if (input) input.value = "";
