@@ -116,9 +116,7 @@ async function download(
   // 1. Validation
   const isValidLink =
     link.startsWith("https://replay.pokemonshowdown.com/") ||
-    link.startsWith("http://replay.pokemonshowdown.com/") ||
-    link.endsWith(".json") ||
-    link.endsWith(".log");
+    link.startsWith("http://replay.pokemonshowdown.com/");
 
   if (!isValidLink) {
     const errorMsg = `[Recorder] Invalid Showdown link: ${link}`;
