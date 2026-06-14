@@ -259,20 +259,45 @@ function startRecording() {
     nochat: chatMode === "hide",
   };
 
-  // Clear empty state
-  const emptyState = document.getElementById("emptyState");
-  if (emptyState) emptyState.style.display = "none";
-
-  const recordings = links.map((link) => {
-    const id = Math.random().toString(36).substring(2, 11);
-    createRecordingItem(link, id, { audioMode, chatMode, speed: currentSpeed });
-    return { link, id };
-  });
-
-  socket.emit("record", { recordings, recordConfig });
-
-  // Clear the input field for next batch of recordings
+  // Clear the input field for next batch of recordings immediately
   if (input) input.value = "";
+
+  links.forEach((link) => {
+    // 1. Domain prefix check
+    const isValidPrefix =
+      link.startsWith("https://replay.pokemonshowdown.com/") ||
+      link.startsWith("http://replay.pokemonshowdown.com/");
+
+    if (!isValidPrefix) {
+      console.warn(`[Validator] Ignored link (invalid domain): ${link}`);
+      return;
+    }
+
+    // 2. Perform async HEAD request check
+    (async () => {
+      try {
+        const cleanLink = link.split("?")[0].replace(/\/$/, "");
+        const verifyUrl = `${cleanLink}.log`;
+
+        const response = await fetch(verifyUrl, { method: "HEAD" });
+        if (response.status !== 404) {
+          // Clear empty state
+          const emptyState = document.getElementById("emptyState");
+          if (emptyState) emptyState.style.display = "none";
+
+          const id = Math.random().toString(36).substring(2, 11);
+          createRecordingItem(link, id, { audioMode, chatMode, speed: currentSpeed });
+
+          socket.emit("record", { recordings: [{ link, id }], recordConfig });
+        } else {
+          console.warn(`[Validator] Replay not found (404): ${verifyUrl}`);
+        }
+      } catch (err) {
+        // Failed to fetch on an invalid Pokemon Showdown domain link represents a 404
+        console.warn(`[Validator] Replay not found or invalid: ${link}`);
+      }
+    })();
+  });
 }
 
 function createRecordingItem(link, id, config = {}) {
