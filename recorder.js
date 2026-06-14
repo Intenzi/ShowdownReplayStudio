@@ -201,7 +201,11 @@ async function download(
 
     // 4. Start Streaming
     const file = fs.createWriteStream(tempPath);
-    const stream = await getStream(page, { audio: true, video: true });
+    const stream = await getStream(page, {
+      audio: true,
+      video: true,
+      mimeType: "video/webm;codecs=vp9",
+    });
 
     await page.click('button[name="play"]');
     stream.pipe(file);
