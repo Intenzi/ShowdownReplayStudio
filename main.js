@@ -223,7 +223,7 @@ async function launchOptimizedBrowser(width, height) {
       args: [
         `--window-size=${width},${height}`,
         `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-        // `--headless=new`,
+        `--headless=new`,
         `--force-device-scale-factor=1`,
         `--hide-scrollbars`,
         `--disable-notifications`,
