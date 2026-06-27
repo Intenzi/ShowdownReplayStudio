@@ -365,35 +365,92 @@ app.get("/api/status", (req, res) => {
 
 // Directory Browser / Folder Picker
 const pickFolderHandler = async (req, res) => {
+  const { execFile } = require("child_process");
+  const platform = os.platform();
+
   try {
-    const { exec } = require("child_process");
-    if (os.platform() === "darwin") {
-      const script = `osascript -e 'POSIX path of (choose folder with prompt "Select Output Folder")'`;
-      exec(script, (err, stdout) => {
-        if (err || !stdout) return res.json({ success: false });
-        const finalPath = stdout.trim();
-        if (!finalPath) return res.json({ success: false });
+    if (platform === "darwin") {
+      const script = `
+        try
+          set selectedFolder to (choose folder with prompt "Select Output Folder")
+          POSIX path of selectedFolder
+        on error errMsg number errNum
+          if errNum is -128 then
+            "CANCELLED"
+          else
+            error errMsg number errNum
+          end if
+        end try
+      `;
+      execFile("osascript", ["-e", script], (err, stdout) => {
+        if (err) return res.json({ success: false });
+        const output = stdout?.trim();
+        if (output === "CANCELLED") {
+          return res.json({ success: false, cancelled: true });
+        }
+        if (!output) return res.json({ success: false });
 
-        config.outputFolder = finalPath;
+        config.outputFolder = output;
         saveConfig(config);
-
-        res.json({ success: true, folder: finalPath, path: finalPath });
+        res.json({ success: true, folder: output, path: output });
       });
-    } else if (os.platform() === "win32") {
-      const script =
-        'powershell.exe -NoProfile -Command "& { $f = New-Object System.Windows.Forms.FolderBrowserDialog; if($f.ShowDialog() -eq \'OK\') { $f.SelectedPath } }"';
-      exec(script, (err, stdout) => {
-        if (err || !stdout) return res.json({ success: false });
-        const finalPath = stdout.trim();
-        if (!finalPath) return res.json({ success: false });
 
-        config.outputFolder = finalPath;
-        saveConfig(config);
+    } else if (platform === "win32") {
+      execFile(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-STA",
+          "-Command",
+          `& {
+            Add-Type -AssemblyName System.Windows.Forms;
+            $f = New-Object System.Windows.Forms.FolderBrowserDialog;
+            $f.Description = 'Select Output Folder';
+            $f.UseDescriptionForTitle = $true;
+            $f.ShowNewFolderButton = $true;
+            if ($f.ShowDialog() -eq 'OK') {
+              $f.SelectedPath
+            }
+          }`,
+        ],
+        (err, stdout) => {
+          if (err) return res.json({ success: false });
+          const finalPath = stdout ? stdout.trim() : "";
+          if (!finalPath) return res.json({ success: false, cancelled: true });
 
-        res.json({ success: true, folder: finalPath, path: finalPath });
-      });
+          config.outputFolder = finalPath;
+          saveConfig(config);
+          res.json({ success: true, folder: finalPath, path: finalPath });
+        }
+      );
+
     } else {
-      res.json({ success: false, message: "Manual path required on Linux" });
+      execFile(
+        "zenity",
+        [
+          "--file-selection",
+          "--directory",
+          "--title=Select Output Folder",
+        ],
+        (err, stdout) => {
+          if (err) {
+            if (err.code === 1) {
+              return res.json({ success: false, cancelled: true });
+            }
+            return res.json({
+              success: false,
+              requiresManualInput: true,
+              message: "Manual path required on Linux",
+            });
+          }
+          const finalPath = stdout ? stdout.trim() : "";
+          if (!finalPath) return res.json({ success: false, cancelled: true });
+
+          config.outputFolder = finalPath;
+          saveConfig(config);
+          res.json({ success: true, folder: finalPath, path: finalPath });
+        }
+      );
     }
   } catch (err) {
     res.json({ success: false, error: err.message });
