@@ -400,7 +400,12 @@ const pickFolderHandler = async (req, res) => {
         "powershell.exe",
         [
           "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
           "-STA",
+          "-InputFormat",
+          "None",
           "-Command",
           `& {
             Add-Type -AssemblyName System.Windows.Forms;
@@ -408,9 +413,15 @@ const pickFolderHandler = async (req, res) => {
             $f.Description = 'Select Output Folder';
             $f.UseDescriptionForTitle = $true;
             $f.ShowNewFolderButton = $true;
-            if ($f.ShowDialog() -eq 'OK') {
+            $w = New-Object System.Windows.Forms.Form;
+            $w.TopMost = $true;
+            $w.Size = New-Object System.Drawing.Size(0,0);
+            $w.StartPosition = 'CenterScreen';
+            $w.ShowInTaskbar = $false;
+            if ($f.ShowDialog($w) -eq 'OK') {
               $f.SelectedPath
             }
+            $w.Dispose();
           }`,
         ],
         (err, stdout) => {
@@ -475,8 +486,14 @@ const pickFileReplayHandler = async (req, res) => {
         handleFileSelection(err, stdout, res);
       });
     } else if (os.platform() === "win32") {
-      execFile("powershell.exe", [
+       execFile("powershell.exe", [
         "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-STA",
+        "-InputFormat",
+        "None",
         "-Command",
         `& {
           Add-Type -AssemblyName System.Windows.Forms;
@@ -484,9 +501,15 @@ const pickFileReplayHandler = async (req, res) => {
           $f.Filter = 'HTML Files (*.html)|*.html';
           $f.Multiselect = $true;
           $f.Title = 'Select Showdown Replay HTML Files';
-          if($f.ShowDialog() -eq 'OK') {
+          $w = New-Object System.Windows.Forms.Form;
+          $w.TopMost = $true;
+          $w.Size = New-Object System.Drawing.Size(0,0);
+          $w.StartPosition = 'CenterScreen';
+          $w.ShowInTaskbar = $false;
+          if ($f.ShowDialog($w) -eq 'OK') {
               $f.FileNames
           }
+          $w.Dispose();
         }`
       ], (err, stdout) => {
         handleFileSelection(err, stdout, res);
