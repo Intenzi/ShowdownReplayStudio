@@ -156,15 +156,100 @@ function updateConfig() {
 }
 
 async function pickFolder(context = "sidebar") {
-  const res = await fetch("/api/pick-folder", { method: "POST" });
-  const data = await res.json();
-  if (data.folder) {
-    config.outputFolder = data.folder;
-    const pathDisplay = document.getElementById("folderPath");
-    const setupPathDisplay = document.getElementById("setupFolderPath");
-    if (pathDisplay) pathDisplay.textContent = data.folder;
-    if (setupPathDisplay) setupPathDisplay.textContent = data.folder;
+  const btn = context === "setup"
+    ? document.querySelector("#step1 button")
+    : document.querySelector(".ws-path-group button");
+
+  let originalHtml = "";
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("btn-loading");
+    originalHtml = btn.innerHTML;
+    if (context === "setup") btn.textContent = "Opening...";
   }
+
+  try {
+    const res = await fetch("/api/pick-folder", { method: "POST" });
+    const data = await res.json();
+
+    if (data.success && data.folder) {
+        applyFolder(data.folder);
+        showToast('Output directory updated successfully.', 'success');
+    } else if (data.requiresManualInput) {
+        showManualPathModal(async (manualPath) => {
+            if (!manualPath?.trim()) return;
+            const trimmed = manualPath.trim();
+            applyFolder(trimmed);
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ outputFolder: trimmed }),
+            });
+            showToast('Output directory updated successfully.', 'success');
+        });
+    } else if (data.cancelled) {
+        // do nothing, user just closed the picker
+    } else {
+        showToast(data.message || 'Could not open folder picker.', 'info');
+    }
+  } catch (err) {
+    console.error("Failed to pick folder:", err);
+    showToast("Failed to open folder picker.", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("btn-loading");
+      if (context === "setup") btn.innerHTML = originalHtml;
+    }
+  }
+}
+
+function applyFolder(path) {
+  config.outputFolder = path;
+  const pathDisplay = document.getElementById("folderPath");
+  const setupPathDisplay = document.getElementById("setupFolderPath");
+  if (pathDisplay) pathDisplay.textContent = path;
+  if (setupPathDisplay) setupPathDisplay.textContent = path;
+}
+
+function showManualPathModal(onConfirm) {
+  const existing = document.getElementById("manual-path-modal");
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+  modal.id = "manual-path-modal";
+  modal.innerHTML = `
+    <div class="modal-backdrop">
+      <div class="modal-box">
+        <h3>Enter Output Folder Path</h3>
+        <p>Paste or type the absolute path to your output folder.</p>
+        <input type="text" id="manual-path-input" placeholder="/home/user/replays" value="${config.outputFolder || ""}" />
+        <div class="modal-actions">
+          <button id="manual-path-cancel">Cancel</button>
+          <button id="manual-path-confirm">Confirm</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const input = modal.querySelector("#manual-path-input");
+  input.focus();
+  input.select();
+
+  modal.querySelector("#manual-path-confirm").addEventListener("click", () => {
+    onConfirm(input.value);
+    modal.remove();
+  });
+
+  modal.querySelector("#manual-path-cancel").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { onConfirm(input.value); modal.remove(); }
+    if (e.key === "Escape") modal.remove();
+  });
 }
 
 function openOutputFolder() {
