@@ -112,8 +112,7 @@ async function download(
   const { nochat, nomusic, noaudio, theme, speed, outputFolder } = config;
   let playersLabel = "Unknown Replay";
   const fileId = generateFileId();
-  const tempPath = path.join(outputFolder, `replay-${fileId}-temp.webm`);
-  const finalPath = path.join(outputFolder, `replay-${fileId}.webm`);
+  const finalPath = path.join(outputFolder, `replay-${fileId}.mp4`);
 
   // 1. Validation
   const isValidLink =
@@ -275,11 +274,11 @@ async function download(
     await page.click(".playbutton");
 
     // 4. Start Streaming
-    const file = fs.createWriteStream(tempPath);
+    const file = fs.createWriteStream(finalPath);
     const stream = await getStream(page, {
       audio: true,
       video: true,
-      mimeType: "video/webm;codecs=vp9",
+      mimeType: "video/mp4;codecs=avc1,mp4a.40.2",
     });
 
     try {
@@ -321,7 +320,7 @@ async function download(
     await waitUntilVictory(600000, page, updateProgress, signal);
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // Buffer for animations
+    await new Promise((resolve) => setTimeout(resolve, 3000)); // Buffer for animations and encoder flushing
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
     // 6. Cleanup Stream
@@ -334,28 +333,18 @@ async function download(
     } catch {}
 
     // 7. Verify Integrity
-    const stats = fs.statSync(tempPath);
+    const stats = fs.statSync(finalPath);
     if (stats.size < 1000)
       throw new Error(`Stream capture failed (empty file).`);
 
-    // 8. Fix WebM Metadata (FFmpeg)
-    emitLog?.(`🎬 Finalizing metadata: ${playersLabel}...`, "info");
-    emitProgress?.(id, link, "finalizing", { players: playersLabel });
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // Delay for file handle release on Windows
-    await fixWebmMetadata(tempPath, finalPath, signal);
-
-    emitLog?.(`✅ Saved: replay-${fileId}.webm`, "success");
+    emitLog?.(`✅ Saved: replay-${fileId}.mp4`, "success");
     emitProgress?.(id, link, "done", {
-      filename: `replay-${fileId}.webm`,
+      filename: `replay-${fileId}.mp4`,
       players: playersLabel,
     });
-
-    try {
-      fs.unlinkSync(tempPath);
-    } catch {}
   } catch (err) {
     try {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
     } catch {}
 
     if (err.message === "Recording cancelled.") {
