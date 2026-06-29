@@ -36,6 +36,7 @@ fs.chmodSync(destBinary, 0o755);
 // 4. Bundle Required Dependencies
 const chromiumSrc = path.join(__dirname, "..", "chromium");
 const extensionSrc = path.join(__dirname, "..", "node_modules", "puppeteer-stream", "extension");
+const ublockSrc = path.join(__dirname, "..", "extensions");
 
 // Extension
 if (fs.existsSync(extensionSrc)) {
@@ -45,6 +46,17 @@ if (fs.existsSync(extensionSrc)) {
     fs.cpSync(extensionSrc, dest, { recursive: true });
   } catch (e) {
     console.warn("⚠️ Failed to bundle extension:", e.message);
+  }
+}
+
+// UBlock & other extensions
+if (fs.existsSync(ublockSrc)) {
+  console.log("🧩 Bundling custom extensions...");
+  const dest = path.join(RESOURCES_DIR, "extensions");
+  try {
+    fs.cpSync(ublockSrc, dest, { recursive: true });
+  } catch (e) {
+    console.warn("⚠️ Failed to bundle custom extensions:", e.message);
   }
 }
 

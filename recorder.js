@@ -186,7 +186,7 @@ async function download(
       deviceScaleFactor: 1,
     });
 
-    await page.goto(link, { waitUntil: "load" });
+    await page.goto(link, { waitUntil: "load", timeout: 60000 });
 
     // Inject UI cleaning styles
     await page.addStyleTag({

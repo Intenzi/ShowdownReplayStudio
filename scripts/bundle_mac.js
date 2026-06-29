@@ -57,6 +57,7 @@ fs.writeFileSync(path.join(CONTENTS_DIR, "Info.plist"), PLIST);
 // 4. Bundle Required Dependencies
 const chromiumSrc = path.join(__dirname, "..", "chromium");
 const extensionSrc = path.join(__dirname, "..", "node_modules", "puppeteer-stream", "extension");
+const ublockSrc = path.join(__dirname, "..", "extensions");
 
 // Extension
 if (fs.existsSync(extensionSrc)) {
@@ -65,6 +66,16 @@ if (fs.existsSync(extensionSrc)) {
     fs.cpSync(extensionSrc, path.join(MAC_OS_DIR, "extension"), { recursive: true });
   } catch (e) {
     console.warn("⚠️ Failed to bundle extension:", e.message);
+  }
+}
+
+// UBlock & other extensions
+if (fs.existsSync(ublockSrc)) {
+  console.log("🧩 Bundling custom extensions...");
+  try {
+    fs.cpSync(ublockSrc, path.join(MAC_OS_DIR, "extensions"), { recursive: true });
+  } catch (e) {
+    console.warn("⚠️ Failed to bundle custom extensions:", e.message);
   }
 }
 
