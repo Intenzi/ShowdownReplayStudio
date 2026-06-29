@@ -273,6 +273,44 @@ async function launchOptimizedBrowser(width, height) {
   }
 }
 
+const launchPromises = { nochat: null, chat: null };
+
+function prelaunchBrowser(type) {
+  if (launchPromises[type]) {
+    return launchPromises[type];
+  }
+  const width = type === "nochat" ? 642 : 1100;
+  launchPromises[type] = launchOptimizedBrowser(width, 450)
+    .then((b) => {
+      browsers[type] = b;
+      return b;
+    })
+    .catch((err) => {
+      console.error(`[Error] Failed to pre-launch ${type} browser: ${err.message}`);
+      launchPromises[type] = null;
+      throw err;
+    });
+  return launchPromises[type];
+}
+
+async function getBrowser(type) {
+  if (browsers[type] && browsers[type].isConnected()) {
+    return browsers[type];
+  }
+  if (launchPromises[type]) {
+    try {
+      const b = await launchPromises[type];
+      if (b && b.isConnected()) {
+        return b;
+      }
+    } catch (err) {
+      // Ignore and retry
+    }
+  }
+  return prelaunchBrowser(type);
+}
+
+
 /**
  * QUEUE SYSTEM
  */
@@ -301,13 +339,8 @@ async function triggerNext() {
   (async () => {
     try {
       const type = config.nochat ? "nochat" : "chat";
-      if (!browsers[type] || !browsers[type].isConnected()) {
-        emitLog(`[Browser] Initializing ${type} instance...`, "info");
-        browsers[type] = await launchOptimizedBrowser(
-          config.nochat ? 642 : 1100,
-          450,
-        );
-      }
+      emitLog(`[Browser] Ensuring ${type} instance is ready...`, "info");
+      const browserInstance = await getBrowser(type);
 
       const ctrl = new AbortController();
       controllers.set(rec.id, ctrl);
@@ -315,7 +348,7 @@ async function triggerNext() {
       await download(
         rec.link,
         rec.id,
-        browsers[type],
+        browserInstance,
         config,
         emitLog,
         emitProgress,
@@ -723,13 +756,8 @@ io.on("connection", (socket) => {
 
       // Check browser
       const type = config.nochat ? "nochat" : "chat";
-      if (!browsers[type] || !browsers[type].isConnected()) {
-        socket.emit("log", { msg: "🌐 Launching headless browser...", type: "info" });
-        browsers[type] = await launchOptimizedBrowser(
-          config.nochat ? 642 : 1100,
-          450,
-        );
-      }
+      socket.emit("log", { msg: `🌐 Ensuring headless browser (${type}) is ready...`, type: "info" });
+      await getBrowser(type);
 
       socket.emit("log", { msg: "✅ Environment ready!", type: "success" });
       socket.emit("setup-done");
@@ -794,11 +822,13 @@ server.listen(APP_PORT, "0.0.0.0", () => {
   open(`http://localhost:${APP_PORT}`);
 
   console.log("[System] Initializing background browsers...");
-  launchOptimizedBrowser(642, 450).then(b => {
-    browsers.nochat = b;
+  Promise.all([
+    prelaunchBrowser("nochat").then(() => console.log("[System] background browser 'nochat' initialized.")),
+    prelaunchBrowser("chat").then(() => console.log("[System] background browser 'chat' initialized."))
+  ]).then(() => {
     console.log("[System] Application ready.");
   }).catch(err => {
-    console.error(`[Error] critical initialization failure: ${err.message}`);
+    console.error(`[Error] Background browser pre-launch failed: ${err.message}`);
   });
 });
 
