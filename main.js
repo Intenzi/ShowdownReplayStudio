@@ -281,8 +281,32 @@ function prelaunchBrowser(type) {
   }
   const width = type === "nochat" ? 642 : 1100;
   launchPromises[type] = launchOptimizedBrowser(width, 450)
-    .then((b) => {
+    .then(async (b) => {
       browsers[type] = b;
+
+      // Warm up the browser cache by loading Showdown
+      console.log(`[Browser] Warming cache for ${type}...`);
+      let page = null;
+      try {
+        page = await b.newPage();
+        await page.goto("https://replay.pokemonshowdown.com/", {
+          waitUntil: "networkidle2",
+          timeout: 20000,
+        });
+        // Let it sit for 3 seconds to ensure resources are parsed and extension is ready
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        console.log(`[Browser] Cache warmed successfully for ${type}!`);
+      } catch (err) {
+        console.warn(`[Browser] Cache warming completed with warnings/timeout for ${type}: ${err.message}`);
+      } finally {
+        if (page) {
+          try {
+            await page.close();
+          } catch {}
+        }
+      }
+
+
       return b;
     })
     .catch((err) => {
