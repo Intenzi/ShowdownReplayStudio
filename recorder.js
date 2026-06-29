@@ -238,10 +238,20 @@ async function download(
 
     // 4. Start Streaming
     file = fs.createWriteStream(finalPath);
+    const captureWidth = nochat ? 642 : 1100;
+    const captureHeight = 362;
     stream = await getStream(page, {
       audio: true,
       video: true,
       mimeType: "video/mp4;codecs=avc1,mp4a.40.2",
+      videoConstraints: {
+        mandatory: {
+          minWidth: captureWidth,
+          minHeight: captureHeight,
+          maxWidth: captureWidth,
+          maxHeight: captureHeight
+        }
+      }
     });
 
     try {
