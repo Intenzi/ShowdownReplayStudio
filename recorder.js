@@ -22,26 +22,42 @@ async function waitUntilVictory(timeout, page, onProgress, signal) {
     if (signal?.aborted) return false;
 
     try {
-      // Extract current turn number
-      const turnNumber = await page.evaluate(`(() => {
+      const { turnNumber, victory } = await page.evaluate(`(() => {
         const turnDiv = document.querySelector(".innerbattle .turn");
-        return turnDiv ? parseInt(turnDiv.innerText.replace("Turn ", "")) || 0 : 0;
-      })()`);
-
-      // Detect "won the battle!" message in the history
-      const victory = await page.evaluate(`(() => {
-        const activeLog = document.querySelector("div.battle-log");
-        if (!activeLog) return false;
-        const logs = activeLog.querySelectorAll("div.battle-history");
-        if (logs.length === 0) return false;
-        return logs[logs.length - 1].textContent.trim().endsWith(" won the battle!");
+        const msgBar = document.querySelector(".innerbattle .messagebar");
+        return {
+          turnNumber: turnDiv ? parseInt(turnDiv.innerText.replace("Turn ", "")) || 0 : 0,
+          victory: msgBar ? msgBar.textContent.includes("won the battle") : false,
+        };
       })()`);
 
       if (onProgress) onProgress(turnNumber);
-      if (victory) return true;
-    } catch (err) {
-      // Silent catch for intermittent browser evaluation errors during page loads
-    }
+
+      if (victory) {
+        let stableCount = 0;
+
+        while (stableCount < 5) {
+          if (signal?.aborted) return false;
+          await new Promise((resolve) => setTimeout(resolve, 300));
+
+          const opacity = await page.evaluate(`(() => {
+            const msgBar = document.querySelector(".innerbattle .messagebar");
+            if (!msgBar) return 0;
+            const style = window.getComputedStyle(msgBar);
+            return parseFloat(style.opacity) || 0;
+          })()`);
+
+          if (opacity === 1) {
+            stableCount++;
+          } else {
+            stableCount = 0; // reset, a new message is animating in
+          }
+        }
+
+        return true;
+      }
+    } catch (err) {}
+
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return false; // Timeout reached
@@ -293,7 +309,7 @@ async function download(
     await waitUntilVictory(600000, page, updateProgress, signal);
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
-    await new Promise((resolve) => setTimeout(resolve, 3000)); // Buffer for animations and encoder flushing
+    await new Promise((resolve) => setTimeout(resolve, 500)); // Buffer for animations and encoder flushing
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
     // 6. Cleanup Stream
