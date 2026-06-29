@@ -1,5 +1,6 @@
 const { launch } = require("puppeteer-stream");
 const { download } = require("./recorder");
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -204,6 +205,40 @@ async function launchOptimizedBrowser(width, height) {
     possibleExtensionPaths.find((p) => fs.existsSync(p)) ||
     possibleExtensionPaths[0];
 
+  function findExtensionPaths(parentDir) {
+    if (!fs.existsSync(parentDir)) return [];
+    const paths = [];
+    try {
+      const files = fs.readdirSync(parentDir);
+      for (const file of files) {
+        const fullPath = path.join(parentDir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          if (fs.existsSync(path.join(fullPath, "manifest.json"))) {
+            paths.push(fullPath);
+          }
+        }
+      }
+    } catch (e) {}
+    return paths;
+  }
+
+  const possibleUblockParentDirs = [
+    path.join(appDir, "extensions"),
+    path.join(appDir, "resources", "extensions"),
+    path.join(appDir, "app", "extensions"),
+    path.join(process.cwd(), "extensions"),
+  ];
+
+  const enableExtensions = [];
+  for (const parentDir of possibleUblockParentDirs) {
+    const paths = findExtensionPaths(parentDir);
+    if (paths.length > 0) {
+      console.log(`[System] Loading custom extensions:`, paths);
+      enableExtensions.push(...paths);
+      break;
+    }
+  }
+
   /**
    * Note: We temporarily override path.join because puppeteer-stream
    * has a hardcoded relative path to its internal extension.
@@ -219,6 +254,8 @@ async function launchOptimizedBrowser(width, height) {
   try {
     const browser = await launch({
       executablePath: launchPath,
+      enableExtensions,
+      startDelay: 3000,
       ignoreDefaultArgs: ["--enable-automation"],
       args: [
         `--window-size=${width},${height}`,
