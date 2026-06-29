@@ -83,22 +83,7 @@ if (fs.existsSync(chromiumSrc)) {
   }
 }
 
-// FFmpeg
-try {
-  let ffmpegSrc = null;
-  try {
-    ffmpegSrc = require("ffmpeg-static");
-  } catch {}
 
-  const ffmpegDest = path.join(RESOURCES_DIR, "ffmpeg");
-  if (ffmpegSrc && fs.existsSync(ffmpegSrc)) {
-    console.log("🎞️ Bundling FFmpeg binary...");
-    fs.copyFileSync(ffmpegSrc, ffmpegDest);
-    fs.chmodSync(ffmpegDest, 0o755);
-  }
-} catch (err) {
-  console.warn("⚠️ FFmpeg binary not found.");
-}
 
 console.log(`\n🎉 Success! Linux Portable Bundle created at: ${LINUX_PORTABLE_DIR}`);
 console.log(`👉 Tar and distribute the folder.`);

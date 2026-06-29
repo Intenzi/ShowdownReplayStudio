@@ -86,27 +86,7 @@ if (fs.existsSync(chromiumSrc)) {
   }
 }
 
-// FFmpeg
-try {
-  let ffmpegSrc = null;
-  try {
-    ffmpegSrc = require("ffmpeg-static");
-  } catch {}
 
-  const ffmpegDest = path.join(RESOURCES_DIR, "ffmpeg.exe");
-  if (ffmpegSrc && fs.existsSync(ffmpegSrc)) {
-    console.log("🎞️ Bundling FFmpeg binary...");
-    fs.copyFileSync(ffmpegSrc, ffmpegDest);
-  } else {
-    // Try to find it in the project root if it was downloaded manually
-    const rootFfmpeg = path.join(__dirname, "..", "ffmpeg.exe");
-    if (fs.existsSync(rootFfmpeg)) {
-      fs.copyFileSync(rootFfmpeg, ffmpegDest);
-    }
-  }
-} catch (err) {
-  console.warn("⚠️ FFmpeg binary not found.");
-}
 
 console.log(
   `\n🎉 Success! Windows Portable Bundle created at: ${WIN_PORTABLE_DIR}`,

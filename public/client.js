@@ -289,7 +289,7 @@ function startSetup() {
   const setupLog = document.getElementById("setupLog");
   if (btn) btn.disabled = true;
 
-  const steps = ["step1", "step2", "step3"];
+  const steps = ["step1", "step2"];
   let currentStep = 0;
 
   const processStep = () => {
@@ -307,7 +307,6 @@ function startSetup() {
       const labels = [
         "Validating output directory...",
         "Verifying Chromium instance...",
-        "Checking FFmpeg binaries...",
       ];
       setupLog.textContent = labels[currentStep];
     }
@@ -644,7 +643,7 @@ function updateRecordingItem(id, state, meta = {}) {
           label.textContent = "Configuring replay options...";
           break;
         case "finalizing":
-          label.textContent = "Fixing video metadata (FFmpeg)...";
+          label.textContent = "Saving recording...";
           break;
       }
     }
