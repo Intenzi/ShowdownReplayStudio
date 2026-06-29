@@ -1,4 +1,5 @@
 const { launch } = require("puppeteer-stream");
+const puppeteerCore = require('puppeteer-core');
 const { download } = require("./recorder");
 
 const express = require("express");
@@ -155,6 +156,25 @@ function saveConfig(cfg) {
   }
 }
 
+async function waitForServiceWorker(browser, extensionId, timeout = 10000) {
+    const exists = browser
+        .targets()
+        .some(
+            (t) =>
+                t.type() === 'service_worker' &&
+                t.url().startsWith(`chrome-extension://${extensionId}/`),
+        );
+
+    if (exists) return;
+
+    await browser.waitForTarget(
+        (t) =>
+            t.type() === 'service_worker' &&
+            t.url().startsWith(`chrome-extension://${extensionId}/`),
+        { timeout },
+    );
+}
+
 /**
  * BROWSER MANAGEMENT
  */
@@ -252,22 +272,50 @@ async function launchOptimizedBrowser(width, height) {
   };
 
   try {
-    const browser = await launch({
-      executablePath: launchPath,
-      enableExtensions,
-      startDelay: 3000,
-      ignoreDefaultArgs: ["--enable-automation"],
-      args: [
-        `--window-size=${width},${height}`,
-        `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-        `--headless=new`,
-        `--force-device-scale-factor=1`,
-        `--hide-scrollbars`,
-        `--disable-notifications`,
-        `--disable-infobars`,
-      ],
-    });
-    return browser;
+      /**
+       * DO NOT TOUCH
+       *
+       * This is NOT an unnecessary wrapper.
+       *
+       * Removing it reintroduces a Chromium/extension startup race that causes
+       * puppeteer-stream to fail with:
+       *
+       *   net::ERR_BLOCKED_BY_CLIENT
+       *
+       * It took several hours of debugging to isolate. If you think this can be
+       * removed, reproduce the issue with uBlock Origin Lite enabled first.
+       */
+      const customPuppeteer = {
+          ...puppeteerCore,
+
+          launch: async (...args) => {
+              const browser = await puppeteerCore.launch(...args);
+
+              await waitForServiceWorker(
+                  browser,
+                  'jjndjgheafjngoipoacpjgeicjeomjli',
+              );
+
+              return browser;
+          },
+      };
+
+      const browser = await launch(customPuppeteer, {
+          executablePath: launchPath,
+          enableExtensions,
+          ignoreDefaultArgs: ['--enable-automation'],
+          args: [
+              `--window-size=${width},${height}`,
+              `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
+              // `--headless=new`,
+              `--force-device-scale-factor=1`,
+              `--hide-scrollbars`,
+              `--disable-notifications`,
+              `--disable-infobars`,
+          ],
+      });
+
+      return browser;
   } finally {
     path.join = originalJoin;
   }
