@@ -213,43 +213,43 @@ async function download(
     });
 
     // Remove consent banner and ads proactively to prevent blocking interactions
-    await page.evaluate(() => {
+    await page.evaluate(`(() => {
       document.querySelector(".fc-consent-root")?.remove();
       document.querySelector("#LeaderboardBTF")?.remove();
       // Sometimes the banner has a backdrop that blocks clicks
       const backdrop = document.querySelector(".fc-ab-root");
       if (backdrop) backdrop.remove();
-    });
+    })()`);
 
     emitProgress?.(id, link, "preparing");
     await page.waitForSelector(".playbutton");
 
     // Apply User Preferences
     const isLocal = link.startsWith("file://");
-    await page.evaluate(({ isLocal, speed, nomusic, noaudio, theme }) => {
+    await page.evaluate(`(({ isLocal, speed, nomusic, noaudio, theme }) => {
       if (isLocal) {
         // 1. Playback Speed
         if (speed !== "normal") {
-          const speedBtn = document.querySelector(`.speedchooser button[value="${speed}"]`) || 
-                           document.querySelector(`button[value="${speed}"]`);
+          const speedBtn = document.querySelector(\`.speedchooser button[value="\${speed}"]\`) || 
+                           document.querySelector(\`button[value="\${speed}"]\`);
           if (speedBtn) speedBtn.click();
         }
 
         // 2. Sound Settings (Only supports "on" / "off" buttons under soundchooser)
         if (nomusic || noaudio) {
-          const muteBtn = document.querySelector(`.soundchooser button[value="off"]`) || 
-                          document.querySelector(`button[value="off"]`);
+          const muteBtn = document.querySelector(\`.soundchooser button[value="off"]\`) || 
+                          document.querySelector(\`button[value="off"]\`);
           if (muteBtn) muteBtn.click();
         } else {
-          const unmuteBtn = document.querySelector(`.soundchooser button[value="on"]`) || 
-                            document.querySelector(`button[value="on"]`);
+          const unmuteBtn = document.querySelector(\`.soundchooser button[value="on"]\`) || 
+                            document.querySelector(\`button[value="on"]\`);
           if (unmuteBtn) unmuteBtn.click();
         }
 
         // 3. Visual Theme
         if (theme !== "auto") {
-          const themeBtn = document.querySelector(`.colorchooser button[value="${theme}"]`) || 
-                           document.querySelector(`button[value="${theme}"]`);
+          const themeBtn = document.querySelector(\`.colorchooser button[value="\${theme}"]\`) || 
+                           document.querySelector(\`button[value="\${theme}"]\`);
           if (themeBtn) themeBtn.click();
         }
       } else {
@@ -268,12 +268,10 @@ async function download(
         else if (noaudio) setSelect('select[name="sound"]', "off");
         if (theme !== "auto") setSelect('select[name="darkmode"]', theme);
       }
-    }, { isLocal, speed, nomusic, noaudio, theme });
+    })(${JSON.stringify({ isLocal, speed, nomusic, noaudio, theme })})`);
 
     // Final check for blocker right before click
-    await page.evaluate(() =>
-      document.querySelector(".fc-consent-root")?.remove(),
-    );
+    await page.evaluate(`(() => document.querySelector(".fc-consent-root")?.remove())()`);
     await page.click(".playbutton");
 
     // 4. Start Streaming
