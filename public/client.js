@@ -555,7 +555,7 @@ function createRecordingItem(link, id, config = {}) {
         </div>
     `;
   queueList.prepend(item);
-  recordingData[id] = { link, state: "queued" };
+  recordingData[id] = { link, state: "queued", config };
   updateSectionVisibility();
 }
 
@@ -577,7 +577,12 @@ function updateRecordingItem(id, state, meta = {}) {
   const queueList = document.getElementById("queueList");
 
   if (item) {
-    if (state === "starting" || state === "recording" || state === "finalizing") {
+    if (state === "queued") {
+      if (item.parentElement !== queueList) {
+        queueList.prepend(item);
+        updateSectionVisibility();
+      }
+    } else if (state === "starting" || state === "recording" || state === "finalizing") {
       if (item.parentElement !== activeList) {
         activeList.prepend(item);
         updateSectionVisibility();
@@ -687,6 +692,25 @@ function updateRecordingItem(id, state, meta = {}) {
                 <button class="btn-rec-action" onclick="editRecordingName('${id}', '${meta.filename}')">Rename</button>
             `;
     }
+  } else if (state === "queued") {
+    if (statusBadge) {
+      statusBadge.textContent = "Queued";
+      statusBadge.className = "status-badge queued";
+    }
+    if (progressFill) {
+      progressFill.style.width = "0%";
+      progressFill.style.backgroundColor = "";
+    }
+    if (percent) percent.textContent = "0%";
+    if (label) label.textContent = "Awaiting recording";
+    if (fileLabel) {
+      fileLabel.classList.add("hidden");
+    }
+    if (actions) {
+      actions.innerHTML = "";
+    }
+    document.getElementById(`cancel-container-${id}`)?.classList.remove("hidden");
+    document.getElementById(`close-${id}`)?.classList.add("hidden");
   } else if (state === "error") {
     if (statusBadge) {
       statusBadge.textContent = "Error";
@@ -695,6 +719,11 @@ function updateRecordingItem(id, state, meta = {}) {
     if (label) label.textContent = "Failed to record";
     document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
     document.getElementById(`close-${id}`)?.classList.remove("hidden");
+    if (actions) {
+      actions.innerHTML = `
+                <button class="btn-rec-action primary" onclick="retryRecording('${id}')">Retry</button>
+            `;
+    }
   } else if (state === "cancelled") {
     if (statusBadge) {
       statusBadge.textContent = "Cancelled";
@@ -704,12 +733,20 @@ function updateRecordingItem(id, state, meta = {}) {
     if (progressFill) progressFill.style.backgroundColor = "#94a3b8";
     document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
     document.getElementById(`close-${id}`)?.classList.remove("hidden");
+    if (actions) {
+      actions.innerHTML = `
+                <button class="btn-rec-action primary" onclick="retryRecording('${id}')">Retry</button>
+            `;
+    }
   }
 
-  // Ensure close button is only shown at the end
+  // Ensure close/cancel buttons are toggled correctly at the end states
   if (state === "done" || state === "error" || state === "cancelled") {
     document.getElementById(`cancel-container-${id}`)?.classList.add("hidden");
     document.getElementById(`close-${id}`)?.classList.remove("hidden");
+  } else if (state === "queued") {
+    document.getElementById(`cancel-container-${id}`)?.classList.remove("hidden");
+    document.getElementById(`close-${id}`)?.classList.add("hidden");
   }
 
   updateSectionVisibility();
@@ -796,6 +833,35 @@ function clearFinished() {
         const id = child.id.replace('rec-', '');
         removeCard(id);
     });
+}
+
+function retryRecording(id) {
+  const data = recordingData[id];
+  if (!data) return;
+
+  // Move back to queue list
+  const item = document.getElementById(`rec-${id}`);
+  const queueList = document.getElementById("queueList");
+  if (item && queueList) {
+    queueList.prepend(item);
+  }
+
+  // Reset visual state and move status
+  updateRecordingItem(id, "queued");
+
+  // Re-emit record request to server
+  const currentSpeed = document.getElementById("speed")?.value;
+  const recordConfig = {
+    speed: data.config?.speed || currentSpeed || "normal",
+    theme: document.getElementById("theme")?.value || "auto",
+    bulk: document.getElementById("bulk")?.value || "1",
+    nomusic: data.config?.nomusic || data.config?.audioMode === "nomusic",
+    noaudio: data.config?.noaudio || data.config?.audioMode === "noaudio",
+    nochat: data.config?.nochat || data.config?.chatMode === "hide",
+  };
+
+  socket.emit("record", { recordings: [{ link: data.link, id }], recordConfig });
+  showToast("Retrying recording...", "info");
 }
 
 function updateSectionVisibility() {
