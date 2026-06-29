@@ -274,6 +274,7 @@ async function launchOptimizedBrowser(width, height) {
 }
 
 const launchPromises = { nochat: null, chat: null };
+let isSystemWarming = true;
 
 function prelaunchBrowser(type) {
   if (launchPromises[type]) {
@@ -454,7 +455,7 @@ app.get("/api/version", async (req, res) => {
 // Status API
 app.get("/api/status", (req, res) => {
   const isReady = fs.existsSync(CONFIG_PATH);
-  res.json({ ready: isReady, recording: activeRecordings > 0 });
+  res.json({ ready: isReady, warming: isSystemWarming, recording: activeRecordings > 0 });
 });
 
 // Directory Browser / Folder Picker
@@ -767,7 +768,7 @@ io.on("connection", (socket) => {
   console.log("[Socket] Client connected");
 
   const isReady = fs.existsSync(CONFIG_PATH);
-  socket.emit("status", { ready: isReady, recording: activeRecordings > 0 });
+  socket.emit("status", { ready: isReady, warming: isSystemWarming, recording: activeRecordings > 0 });
 
   socket.on("setup", async () => {
     try {
@@ -785,7 +786,7 @@ io.on("connection", (socket) => {
 
       socket.emit("log", { msg: "✅ Environment ready!", type: "success" });
       socket.emit("setup-done");
-      io.emit("status", { ready: true, recording: activeRecordings > 0 });
+      io.emit("status", { ready: true, warming: isSystemWarming, recording: activeRecordings > 0 });
     } catch (err) {
       socket.emit("log", { msg: `❌ Setup failed: ${err.message}`, type: "error" });
     }
@@ -850,9 +851,13 @@ server.listen(APP_PORT, "0.0.0.0", () => {
     prelaunchBrowser("nochat").then(() => console.log("[System] background browser 'nochat' initialized.")),
     prelaunchBrowser("chat").then(() => console.log("[System] background browser 'chat' initialized."))
   ]).then(() => {
+    isSystemWarming = false;
     console.log("[System] Application ready.");
+    io.emit("status", { ready: true, warming: false, recording: activeRecordings > 0 });
   }).catch(err => {
+    isSystemWarming = false;
     console.error(`[Error] Background browser pre-launch failed: ${err.message}`);
+    io.emit("status", { ready: true, warming: false, recording: activeRecordings > 0 });
   });
 });
 

@@ -85,6 +85,14 @@ function updateStatus(status) {
     if (dot) dot.className = "status-dot recording";
     if (text) text.textContent = "Recording Replays...";
     isRecording = true;
+  } else if (status.warming && status.ready) {
+    if (dot) dot.className = "status-dot warming";
+    if (text) text.textContent = "Optimizing system...";
+    if (btn) btn.disabled = false;
+    isRecording = false;
+    setupDone = true;
+    const overlay = document.getElementById("setupOverlay");
+    if (overlay) overlay.classList.add("hidden");
   } else if (status.ready) {
     if (dot) dot.className = "status-dot ready";
     if (text) text.textContent = "Ready";

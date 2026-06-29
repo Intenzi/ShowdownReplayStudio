@@ -184,6 +184,13 @@ header {
   animation: pulse 1.5s infinite;
 }
 
+.status-dot.warming {
+  background-color: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+  animation: pulse 1.5s infinite;
+}
+
+
 @keyframes pulse {
   0% {
     opacity: 1;
