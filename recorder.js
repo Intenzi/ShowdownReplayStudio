@@ -76,6 +76,10 @@ async function download(
     return;
   }
 
+  let page = null;
+  let stream = null;
+  let file = null;
+
   try {
     // 2. Fetch Metadata
     emitProgress?.(id, link, "fetching");
@@ -128,7 +132,7 @@ async function download(
 
     // 3. Page Setup
     emitProgress?.(id, link, "setup");
-    const page = await browser.newPage();
+    page = await browser.newPage();
     await page.setViewport({
       width: nochat ? 642 : 1100,
       height: 362,
@@ -224,8 +228,8 @@ async function download(
     await page.click(".playbutton");
 
     // 4. Start Streaming
-    const file = fs.createWriteStream(finalPath);
-    const stream = await getStream(page, {
+    file = fs.createWriteStream(finalPath);
+    stream = await getStream(page, {
       audio: true,
       video: true,
       mimeType: "video/mp4;codecs=avc1,mp4a.40.2",
@@ -274,13 +278,14 @@ async function download(
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
     // 6. Cleanup Stream
-    stream.unpipe(file);
-    file.end();
-    await new Promise((resolve) => file.on("finish", resolve));
-    stream.destroy();
-    try {
-      await page.close();
-    } catch {}
+    if (stream) {
+      stream.unpipe(file);
+      stream.destroy();
+    }
+    if (file) {
+      file.end();
+      await new Promise((resolve) => file.on("finish", resolve));
+    }
 
     // 7. Verify Integrity
     const stats = fs.statSync(finalPath);
@@ -293,6 +298,18 @@ async function download(
       players: playersLabel,
     });
   } catch (err) {
+    if (stream) {
+      try {
+        stream.unpipe(file);
+        stream.destroy();
+      } catch {}
+    }
+    if (file) {
+      try {
+        file.end();
+      } catch {}
+    }
+
     try {
       if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
     } catch {}
@@ -306,7 +323,14 @@ async function download(
       emitProgress?.(id, link, "error");
       console.error(err);
     }
+  } finally {
+    if (page) {
+      try {
+        await page.close();
+      } catch {}
+    }
   }
+
 }
 module.exports = {
   download,
