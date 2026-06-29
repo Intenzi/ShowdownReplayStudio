@@ -225,7 +225,16 @@ async function download(
 
     // Final check for blocker right before click
     await page.evaluate(`(() => document.querySelector(".fc-consent-root")?.remove())()`);
+
+    // Wait for network idle to ensure all sprites/GIFs are fully fetched before starting
+    try {
+      await page.waitForNetworkIdle({ idleTime: 500, timeout: 10000 });
+    } catch (err) {
+      // Proceed even if some tracker/ad hangs the network
+    }
+
     await page.click(".playbutton");
+
 
     // 4. Start Streaming
     file = fs.createWriteStream(finalPath);
