@@ -1,5 +1,4 @@
 const { getStream } = require("puppeteer-stream");
-const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -11,56 +10,7 @@ const generateFileId = () =>
   Math.random().toString(36).substring(2, 15) +
   Math.random().toString(36).substring(2, 5);
 
-/**
- * FFmpeg CONFIGURATION
- */
-function getFfmpegPath() {
-  let resPath = "ffmpeg";
-  const { execSync } = require("child_process");
 
-  console.log(`[System] Resolving FFmpeg. Platform: ${os.platform()}`);
-
-  // 1. Try system PATH first (most reliable for Windows users who have it installed)
-  try {
-    execSync("ffmpeg -version", { stdio: "ignore" });
-    console.log("[System] Found working system-wide FFmpeg.");
-    return "ffmpeg";
-  } catch (e) {
-    console.log("[System] System-wide FFmpeg not found on PATH.");
-  }
-
-  // 2. Try bundled/pkg path
-  if (process.pkg) {
-    resPath = path.join(path.dirname(process.execPath), "ffmpeg");
-    if (os.platform() === "win32") resPath += ".exe";
-  } else {
-    // 3. Try npm-installed ffmpeg-static
-    try {
-      resPath = require("ffmpeg-static");
-      console.log(`[System] ffmpeg-static returned: ${resPath}`);
-    } catch (err) {
-      console.warn("[System] ffmpeg-static require failed.");
-      resPath = "ffmpeg";
-    }
-  }
-
-  // Final validation and normalization for Windows
-  if (path.isAbsolute(resPath)) {
-    if (!fs.existsSync(resPath)) {
-      console.warn(`[System] Warning: Path does not exist: ${resPath}.`);
-      resPath = "ffmpeg";
-    } else {
-      // Very Important for Windows: Ensure paths are correctly escaped/quoted later
-      resPath = path.resolve(resPath);
-    }
-  }
-
-  console.log(`[System] Final FFmpeg binary path: ${resPath}`);
-  return resPath;
-}
-
-const ffmpegPath = getFfmpegPath();
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 /**
  * BROWSER LOGIC: Turn Detection & Victory State
@@ -358,87 +308,7 @@ async function download(
     }
   }
 }
-
-/**
- * FFmpeg: Metadata Repair
- */
-async function fixWebmMetadata(input, output, signal) {
-  // Pre-check if FFmpeg actually works to avoid background crashes in fluent-ffmpeg
-  try {
-    const { execSync } = require("child_process");
-    execSync(`"${ffmpegPath}" -version`, { stdio: "ignore" });
-  } catch (err) {
-    if (signal?.aborted) return;
-    console.error(
-      `[FFmpeg] Pre-check failed for binary: ${ffmpegPath}. Skipping metadata repair.`,
-    );
-    console.error(
-      "[FFmpeg] The recording will still be saved but might have seek/duration issues in some players.",
-    );
-    fs.copyFileSync(input, output);
-    return;
-  }
-
-  return new Promise((resolve, reject) => {
-    try {
-      const command = ffmpeg(input)
-        .withVideoCodec("copy")
-        .withAudioCodec("copy")
-        .output(output)
-        .on("start", (cmd) => {
-          if (signal?.aborted) {
-            command.kill();
-            return;
-          }
-          console.log(`[FFmpeg] Started command: ${cmd}`);
-        })
-        .on("end", () => {
-          resolve();
-        })
-        .on("error", (err, stdout, stderr) => {
-          if (signal?.aborted) {
-            return resolve();
-          }
-          console.error("[FFmpeg] Error:", err.message);
-          console.error("[FFmpeg] Stderr:", stderr);
-          // If FFmpeg fails, we still want to "succeed" by just using the raw file
-          console.warn("[FFmpeg] Repair failed, using raw capture instead.");
-          try {
-            fs.copyFileSync(input, output);
-            resolve();
-          } catch (e) {
-            reject(e);
-          }
-        });
-
-      if (signal) {
-        signal.addEventListener("abort", () => {
-          try {
-            command.kill();
-          } catch {}
-        });
-      }
-
-      command.run();
-    } catch (err) {
-      if (signal?.aborted) return resolve();
-      console.error(
-        "[FFmpeg] Synchronous error launching FFmpeg:",
-        err.message,
-      );
-      // Fallback
-      try {
-        fs.copyFileSync(input, output);
-        resolve();
-      } catch (e) {
-        reject(e);
-      }
-    }
-  });
-}
-
 module.exports = {
   download,
   waitUntilVictory,
-  fixWebmMetadata,
 };
