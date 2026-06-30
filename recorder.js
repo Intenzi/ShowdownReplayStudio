@@ -22,43 +22,36 @@ async function waitUntilVictory(timeout, page, onProgress, signal) {
     if (signal?.aborted) return false;
 
     try {
-      const { turnNumber, victory } = await page.evaluate(`(() => {
-        const turnDiv = document.querySelector(".innerbattle .turn");
-        const msgBar = document.querySelector(".innerbattle .messagebar");
-        return {
-          turnNumber: turnDiv ? parseInt(turnDiv.innerText.replace("Turn ", "")) || 0 : 0,
-          victory: msgBar ? msgBar.textContent.includes("won the battle") : false,
-        };
-      })()`);
+      const { turnNumber, ended, animationsIdle } =
+        await page.evaluate(`(() => {
+          const battle = window.battle;
+          const scene = battle?.scene;
+          return {
+            turnNumber: battle?.turn ?? 0,
+            ended: !!(battle?.ended),
+            animationsIdle: scene
+              ? scene.activeAnimations.length === 0 && scene.timeOffset === 0
+              : false,
+          };
+        })()`);
 
-      if (onProgress) onProgress(turnNumber);
+        if (onProgress) onProgress(turnNumber);
 
-      if (victory) {
-        let stableCount = 0;
-
-        while (stableCount < 5) {
-          if (signal?.aborted) return false;
-          await new Promise((resolve) => setTimeout(resolve, 300));
-
-          const opacity = await page.evaluate(`(() => {
-            const msgBar = document.querySelector(".innerbattle .messagebar");
-            if (!msgBar) return 0;
-            const style = window.getComputedStyle(msgBar);
-            return parseFloat(style.opacity) || 0;
-          })()`);
-
-          if (opacity === 1) {
-            stableCount++;
-          } else {
-            stableCount = 0; // reset, a new message is animating in
-          }
+        if (ended && animationsIdle) {
+          // activeAnimations is empty and timeOffset is 0 — jQuery queue is
+          // drained. Now wait for the browser to actually paint the final frame.
+          const painted = await page.evaluate(`
+            new Promise(resolve =>
+              requestAnimationFrame(() =>
+                requestAnimationFrame(() => resolve(true))
+              )
+            )
+          `);
+          if (painted) return true;
         }
-
-        return true;
-      }
     } catch (err) {}
 
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   return false; // Timeout reached
 }
