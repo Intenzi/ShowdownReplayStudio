@@ -259,6 +259,14 @@ async function launchOptimizedBrowser(width, height) {
     const paths = findExtensionPaths(parentDir);
     if (paths.length > 0) {
       console.log(`[System] Loading custom extensions:`, paths);
+      for (const p of paths) {
+        const metaDir = path.join(p, "_metadata");
+        if (fs.existsSync(metaDir)) {
+          try {
+            fs.rmSync(metaDir, { recursive: true, force: true });
+          } catch (err) {}
+        }
+      }
       enableExtensions.push(...paths);
       break;
     }
