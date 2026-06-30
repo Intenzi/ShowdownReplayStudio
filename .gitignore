@@ -8,4 +8,6 @@ config.json
 dist/
 .DS_Store
 Archive.zip
+_metadata/
+**/_metadata/
 
