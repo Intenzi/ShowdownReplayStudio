@@ -1430,3 +1430,8 @@ body[data-theme="dark"] .tab-btn:hover {
   background: #ff6b35;
   border-color: #ff6b35;
 }
+
+.bulk-warning-tooltip-container:hover .bulk-tooltip-text {
+  visibility: visible !important;
+  opacity: 1 !important;
+}

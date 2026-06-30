@@ -140,7 +140,9 @@ function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-      return { ...DEFAULT_CONFIG, ...saved };
+      const loaded = { ...DEFAULT_CONFIG, ...saved };
+      loaded.bulk = Math.min(3, Math.max(1, parseInt(loaded.bulk) || 1));
+      return loaded;
     }
   } catch (err) {
     console.error("[Config] Failed to parse config.json, using defaults.");
@@ -178,7 +180,10 @@ async function waitForServiceWorker(browser, extensionId, timeout = 10000) {
 /**
  * BROWSER MANAGEMENT
  */
-const browsers = { nochat: null, chat: null };
+const pools = {
+  nochat: Array.from({ length: 3 }, (_, i) => ({ id: i, browser: null, launchPromise: null, inUse: false })),
+  chat: Array.from({ length: 3 }, (_, i) => ({ id: i, browser: null, launchPromise: null, inUse: false }))
+};
 
 async function launchOptimizedBrowser(width, height) {
   let launchPath = bundledExecutablePath;
@@ -307,7 +312,7 @@ async function launchOptimizedBrowser(width, height) {
           args: [
               `--window-size=${width},${height}`,
               `--allowlisted-extension-id=jjndjgheafjngoipoacpjgeicjeomjli`,
-              `--headless=new`,
+              // `--headless=new`,
               `--force-device-scale-factor=1`,
               `--hide-scrollbars`,
               `--disable-notifications`,
@@ -321,58 +326,94 @@ async function launchOptimizedBrowser(width, height) {
   }
 }
 
-const launchPromises = { nochat: null, chat: null };
 let isSystemWarming = true;
+let idleTimeoutId = null;
 
-function prelaunchBrowser(type) {
-  if (launchPromises[type]) {
-    return launchPromises[type];
+function stopIdleTimeout() {
+  if (idleTimeoutId) {
+    clearTimeout(idleTimeoutId);
+    idleTimeoutId = null;
   }
-  const width = type === "nochat" ? 642 : 1100;
-  launchPromises[type] = launchOptimizedBrowser(width, 450)
-    .then(async (b) => {
-      browsers[type] = b;
+}
 
-      // Warm up the browser cache by loading Showdown
-      console.log(`[Browser] Warming cache for ${type}...`);
-      let page = null;
-      try {
-        page = await b.newPage();
-        await page.goto("https://replay.pokemonshowdown.com/", {
-          waitUntil: "networkidle2",
-          timeout: 20000,
-        });
-        // Let it sit for 3 seconds to ensure resources are parsed and extension is ready
-        await new Promise((resolve) => setTimeout(resolve, 3000));
-        console.log(`[Browser] Cache warmed successfully for ${type}!`);
-      } catch (err) {
-        console.warn(`[Browser] Cache warming completed with warnings/timeout for ${type}: ${err.message}`);
-      } finally {
-        if (page) {
-          try {
-            await page.close();
-          } catch {}
+function startIdleTimeout() {
+  stopIdleTimeout();
+
+  if (activeRecordings === 0 && globalQueue.length === 0) {
+    idleTimeoutId = setTimeout(async () => {
+      console.log("[System] Idle for 30 minutes. Shutting down browser pool to release resources...");
+      for (const type of ["nochat", "chat"]) {
+        for (const item of pools[type]) {
+          if (item.browser) {
+            try {
+              await item.browser.close();
+              console.log(`[Browser] Closed ${type} [${item.id}]`);
+            } catch (err) {
+              console.error(`[System] Error closing browser ${type} [${item.id}]: ${err.message}`);
+            }
+          }
+          item.browser = null;
+          item.launchPromise = null;
+          item.inUse = false;
         }
       }
+      console.log("[System] Browser pool cleared.");
+    }, 30 * 60 * 1000);  // 30 minutes
+  }
+}
 
+function prelaunchBrowser(type, index, shouldWarm = true) {
+  const item = pools[type][index];
+  if (item.launchPromise) {
+    return item.launchPromise;
+  }
+  const width = type === "nochat" ? 642 : 1100;
+  item.launchPromise = launchOptimizedBrowser(width, 450)
+    .then(async (b) => {
+      item.browser = b;
+
+      if (shouldWarm) {
+        console.log(`[Browser] Warming cache for ${type} [${index}]...`);
+        let page = null;
+        try {
+          page = await b.newPage();
+          await page.goto("https://replay.pokemonshowdown.com/", {
+            waitUntil: "networkidle2",
+            timeout: 20000,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          console.log(`[Browser] Cache warmed successfully for ${type} [${index}]!`);
+        } catch (err) {
+          console.warn(`[Browser] Cache warming completed with warnings/timeout for ${type} [${index}]: ${err.message}`);
+        } finally {
+          if (page) {
+            try {
+              await page.close();
+            } catch {}
+          }
+        }
+      } else {
+        console.log(`[Browser] Launched on-demand instance ${type} [${index}] (no cache warming).`);
+      }
 
       return b;
     })
     .catch((err) => {
-      console.error(`[Error] Failed to pre-launch ${type} browser: ${err.message}`);
-      launchPromises[type] = null;
+      console.error(`[Error] Failed to pre-launch ${type} [${index}] browser: ${err.message}`);
+      item.launchPromise = null;
       throw err;
     });
-  return launchPromises[type];
+  return item.launchPromise;
 }
 
-async function getBrowser(type) {
-  if (browsers[type] && browsers[type].isConnected()) {
-    return browsers[type];
+async function getBrowser(type, index, shouldWarm = true) {
+  const item = pools[type][index];
+  if (item.browser && item.browser.isConnected()) {
+    return item.browser;
   }
-  if (launchPromises[type]) {
+  if (item.launchPromise) {
     try {
-      const b = await launchPromises[type];
+      const b = await item.launchPromise;
       if (b && b.isConnected()) {
         return b;
       }
@@ -380,7 +421,7 @@ async function getBrowser(type) {
       // Ignore and retry
     }
   }
-  return prelaunchBrowser(type);
+  return prelaunchBrowser(type, index, shouldWarm);
 }
 
 
@@ -393,54 +434,65 @@ let activeRecordings = 0;
 const controllers = new Map();
 
 async function triggerNext() {
-  const maxConcurrency = config.bulk === "all" ? 99 : (parseInt(config.bulk) || 1);
+  const maxConcurrency = Math.min(3, parseInt(config.bulk) || 1);
 
   // Use a while loop to fill up all available slots immediately
   while (concurrentCount < maxConcurrency && globalQueue.length > 0) {
+    const type = config.nochat ? "nochat" : "chat";
+    const poolItem = pools[type].find((item) => !item.inUse);
+    if (!poolItem) {
+      break;
+    }
+
     const rec = globalQueue.shift();
     concurrentCount++;
     activeRecordings++;
+    poolItem.inUse = true;
 
-  io.emit("status", { ready: true, recording: true });
+    stopIdleTimeout();
 
-  const emitLog = (msg, type = "info") => io.emit("log", { msg, type });
-  const emitProgress = (id, link, state, meta = {}) =>
-    io.emit("progress", { id, link, state, ...meta });
+    io.emit("status", { ready: true, recording: true });
 
-  emitProgress(rec.id, rec.link, "starting");
+    const emitLog = (msg, type = "info") => io.emit("log", { msg, type });
+    const emitProgress = (id, link, state, meta = {}) =>
+      io.emit("progress", { id, link, state, ...meta });
 
-  (async () => {
-    try {
-      const type = config.nochat ? "nochat" : "chat";
-      emitLog(`[Browser] Ensuring ${type} instance is ready...`, "info");
-      const browserInstance = await getBrowser(type);
+    emitProgress(rec.id, rec.link, "starting");
 
-      const ctrl = new AbortController();
-      controllers.set(rec.id, ctrl);
+    (async () => {
+      try {
+        emitLog(`[Browser] Ensuring ${type} instance [${poolItem.id}] is ready...`, "info");
+        // Created anew / on-demand inside queue run won't have cache warmup done.
+        const browserInstance = await getBrowser(type, poolItem.id, false);
 
-      await download(
-        rec.link,
-        rec.id,
-        browserInstance,
-        config,
-        emitLog,
-        emitProgress,
-        ctrl.signal,
-      );
-    } catch (err) {
-      emitLog(`[Error] ${err.message}`, "error");
-    } finally {
-      controllers.delete(rec.id);
-      concurrentCount--;
-      activeRecordings--;
-      io.emit("status", { ready: true, recording: activeRecordings > 0 });
+        const ctrl = new AbortController();
+        controllers.set(rec.id, ctrl);
 
-      if (activeRecordings === 0 && globalQueue.length === 0) {
-        emitLog("🏁 All queued processes complete!", "success");
+        await download(
+          rec.link,
+          rec.id,
+          browserInstance,
+          config,
+          emitLog,
+          emitProgress,
+          ctrl.signal,
+        );
+      } catch (err) {
+        emitLog(`[Error] ${err.message}`, "error");
+      } finally {
+        controllers.delete(rec.id);
+        poolItem.inUse = false;
+        concurrentCount--;
+        activeRecordings--;
+        io.emit("status", { ready: true, recording: activeRecordings > 0 });
+
+        if (activeRecordings === 0 && globalQueue.length === 0) {
+          emitLog("🏁 All queued processes complete!", "success");
+        }
+        startIdleTimeout();
+        triggerNext();
       }
-      triggerNext();
-    }
-  })(); // End of async IIFE
+    })(); // End of async IIFE
   } // End of while loop
 }
 
@@ -479,6 +531,7 @@ app.get("/api/config", (req, res) => res.json(config));
 
 app.post("/api/config", (req, res) => {
   config = { ...config, ...req.body };
+  config.bulk = Math.min(3, Math.max(1, parseInt(config.bulk) || 1));
   saveConfig(config);
   // Real-time bulk limit application
   triggerNext();
@@ -793,10 +846,12 @@ app.post("/api/quit", (req, res) => {
   console.log("[System] Shutdown requested via API. Cleaning up...");
 
   for (const type of ["nochat", "chat"]) {
-    if (browsers[type]) {
-      try {
-        browsers[type].close();
-      } catch (err) {}
+    for (const item of pools[type]) {
+      if (item.browser) {
+        try {
+          item.browser.close();
+        } catch (err) {}
+      }
     }
   }
 
@@ -830,7 +885,7 @@ io.on("connection", (socket) => {
       // Check browser
       const type = config.nochat ? "nochat" : "chat";
       socket.emit("log", { msg: `🌐 Ensuring headless browser (${type}) is ready...`, type: "info" });
-      await getBrowser(type);
+      await getBrowser(type, 0, true);
 
       socket.emit("log", { msg: "✅ Environment ready!", type: "success" });
       socket.emit("setup-done");
@@ -841,6 +896,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("record", ({ recordings, recordConfig }) => {
+    stopIdleTimeout();
     if (recordConfig) {
       config = { ...config, ...recordConfig };
       saveConfig(config);
@@ -854,6 +910,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("add-to-queue", (links) => {
+    stopIdleTimeout();
     links.forEach((link) => {
       const id = generateFileId();
       globalQueue.push({ id, link });
@@ -895,18 +952,31 @@ server.listen(APP_PORT, "0.0.0.0", () => {
   open(`http://localhost:${APP_PORT}`);
 
   console.log("[System] Initializing background browsers...");
-  Promise.all([
-    prelaunchBrowser("nochat").then(() => console.log("[System] background browser 'nochat' initialized.")),
-    prelaunchBrowser("chat").then(() => console.log("[System] background browser 'chat' initialized."))
-  ]).then(() => {
-    isSystemWarming = false;
-    console.log("[System] Application ready.");
-    io.emit("status", { ready: true, warming: false, recording: activeRecordings > 0 });
-  }).catch(err => {
-    isSystemWarming = false;
-    console.error(`[Error] Background browser pre-launch failed: ${err.message}`);
-    io.emit("status", { ready: true, warming: false, recording: activeRecordings > 0 });
-  });
+  (async () => {
+    try {
+      console.log("[System] Launching first batch of background browsers...");
+      await Promise.all([
+        prelaunchBrowser("nochat", 0, true).then(() => console.log("[System] background browser 'nochat' [0] initialized.")),
+        prelaunchBrowser("chat", 0, true).then(() => console.log("[System] background browser 'chat' [0] initialized."))
+      ]);
+
+      console.log("[System] Launching second batch of background browsers...");
+      await Promise.all([
+        prelaunchBrowser("nochat", 1, true).then(() => console.log("[System] background browser 'nochat' [1] initialized.")),
+        prelaunchBrowser("chat", 1, true).then(() => console.log("[System] background browser 'chat' [1] initialized."))
+      ]);
+
+      isSystemWarming = false;
+      console.log("[System] Application ready.");
+      io.emit("status", { ready: true, warming: false, recording: activeRecordings > 0 });
+      startIdleTimeout();
+    } catch (err) {
+      isSystemWarming = false;
+      console.error(`[Error] Background browser pre-launch failed: ${err.message}`);
+      io.emit("status", { ready: true, warming: false, recording: activeRecordings > 0 });
+      startIdleTimeout();
+    }
+  })();
 });
 
 /**
