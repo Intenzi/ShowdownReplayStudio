@@ -158,7 +158,7 @@ function saveConfig(cfg) {
   }
 }
 
-async function waitForServiceWorker(browser, extensionId, timeout = 10000) {
+async function waitForServiceWorker(browser, extensionId, timeout = 30000) {
     const exists = browser
         .targets()
         .some(
@@ -303,11 +303,17 @@ async function launchOptimizedBrowser(width, height) {
 
           launch: async (...args) => {
               const browser = await puppeteerCore.launch(...args);
-
-              await waitForServiceWorker(
-                  browser,
-                  'jjndjgheafjngoipoacpjgeicjeomjli',
-              );
+              try {
+                  await waitForServiceWorker(
+                      browser,
+                      'jjndjgheafjngoipoacpjgeicjeomjli',
+                  );
+              } catch (err) {
+                  try {
+                      await browser.close();
+                  } catch (closeErr) {}
+                  throw err;
+              }
 
               return browser;
           },
@@ -381,25 +387,27 @@ function prelaunchBrowser(type, index, shouldWarm = true) {
       item.browser = b;
 
       if (shouldWarm) {
-        console.log(`[Browser] Warming cache for ${type} [${index}]...`);
-        let page = null;
-        try {
-          page = await b.newPage();
-          await page.goto("https://replay.pokemonshowdown.com/", {
-            waitUntil: "networkidle2",
-            timeout: 20000,
-          });
-          await new Promise((resolve) => setTimeout(resolve, 3000));
-          console.log(`[Browser] Cache warmed successfully for ${type} [${index}]!`);
-        } catch (err) {
-          console.warn(`[Browser] Cache warming completed with warnings/timeout for ${type} [${index}]: ${err.message}`);
-        } finally {
-          if (page) {
-            try {
-              await page.close();
-            } catch {}
+        console.log(`[Browser] Background warming started for ${type} [${index}]...`);
+        (async () => {
+          let page = null;
+          try {
+            page = await b.newPage();
+            await page.goto("https://replay.pokemonshowdown.com/", {
+              waitUntil: "networkidle2",
+              timeout: 20000,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            console.log(`[Browser] Cache warmed successfully in background for ${type} [${index}]!`);
+          } catch (err) {
+            console.warn(`[Browser] Background cache warming completed with warnings/timeout for ${type} [${index}]: ${err.message}`);
+          } finally {
+            if (page) {
+              try {
+                await page.close();
+              } catch {}
+            }
           }
-        }
+        })();
       } else {
         console.log(`[Browser] Launched on-demand instance ${type} [${index}] (no cache warming).`);
       }
@@ -962,17 +970,21 @@ server.listen(APP_PORT, "0.0.0.0", () => {
   console.log("[System] Initializing background browsers...");
   (async () => {
     try {
-      console.log("[System] Launching first batch of background browsers...");
-      await Promise.all([
-        prelaunchBrowser("nochat", 0, true).then(() => console.log("[System] background browser 'nochat' [0] initialized.")),
-        prelaunchBrowser("chat", 0, true).then(() => console.log("[System] background browser 'chat' [0] initialized."))
-      ]);
+      console.log("[System] Launching background browser 'nochat' [0]...");
+      await prelaunchBrowser("nochat", 0, true);
+      console.log("[System] background browser 'nochat' [0] initialized.");
 
-      console.log("[System] Launching second batch of background browsers...");
-      await Promise.all([
-        prelaunchBrowser("nochat", 1, true).then(() => console.log("[System] background browser 'nochat' [1] initialized.")),
-        prelaunchBrowser("chat", 1, true).then(() => console.log("[System] background browser 'chat' [1] initialized."))
-      ]);
+      console.log("[System] Launching background browser 'chat' [0]...");
+      await prelaunchBrowser("chat", 0, true);
+      console.log("[System] background browser 'chat' [0] initialized.");
+
+      console.log("[System] Launching background browser 'nochat' [1]...");
+      await prelaunchBrowser("nochat", 1, true);
+      console.log("[System] background browser 'nochat' [1] initialized.");
+
+      console.log("[System] Launching background browser 'chat' [1]...");
+      await prelaunchBrowser("chat", 1, true);
+      console.log("[System] background browser 'chat' [1] initialized.");
 
       isSystemWarming = false;
       console.log("[System] Application ready.");
