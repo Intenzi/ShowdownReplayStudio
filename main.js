@@ -181,8 +181,8 @@ async function waitForServiceWorker(browser, extensionId, timeout = 30000) {
  * BROWSER MANAGEMENT
  */
 const pools = {
-  nochat: Array.from({ length: 3 }, (_, i) => ({ id: i, browser: null, launchPromise: null, inUse: false })),
-  chat: Array.from({ length: 3 }, (_, i) => ({ id: i, browser: null, launchPromise: null, inUse: false }))
+  nochat: Array.from({ length: 3 }, (_, i) => ({ id: i, browser: null, launchPromise: null, warmPromise: null, inUse: false })),
+  chat: Array.from({ length: 3 }, (_, i) => ({ id: i, browser: null, launchPromise: null, warmPromise: null, inUse: false }))
 };
 
 async function launchOptimizedBrowser(width, height) {
@@ -388,7 +388,7 @@ function prelaunchBrowser(type, index, shouldWarm = true) {
 
       if (shouldWarm) {
         console.log(`[Browser] Background warming started for ${type} [${index}]...`);
-        (async () => {
+        item.warmPromise = (async () => {
           let page = null;
           try {
             page = await b.newPage();
@@ -410,6 +410,7 @@ function prelaunchBrowser(type, index, shouldWarm = true) {
         })();
       } else {
         console.log(`[Browser] Launched on-demand instance ${type} [${index}] (no cache warming).`);
+        item.warmPromise = Promise.resolve();
       }
 
       return b;
@@ -985,6 +986,14 @@ server.listen(APP_PORT, "0.0.0.0", () => {
       console.log("[System] Launching background browser 'chat' [1]...");
       await prelaunchBrowser("chat", 1, true);
       console.log("[System] background browser 'chat' [1] initialized.");
+
+      console.log("[System] Waiting for background cache warming to complete...");
+      await Promise.all([
+        pools.nochat[0].warmPromise,
+        pools.chat[0].warmPromise,
+        pools.nochat[1].warmPromise,
+        pools.chat[1].warmPromise
+      ].filter(Boolean));
 
       isSystemWarming = false;
       console.log("[System] Application ready.");
