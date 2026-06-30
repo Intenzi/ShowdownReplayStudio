@@ -194,7 +194,15 @@
                 </div>
                 <div class="ws-actions">
                     <div class="bulk-limit-container">
-                        <label for="bulk">Bulk Limit</label>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <label for="bulk" style="margin: 0;">Bulk Limit</label>
+                            <span id="bulkWarning" class="bulk-warning-tooltip-container hidden" style="position: relative; display: inline-flex; align-items: center; cursor: pointer; color: #f39c12;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink: 0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                <span class="bulk-tooltip-text" style="visibility: hidden; width: 220px; background-color: #1a1d24; border: 1px solid rgba(243, 156, 18, 0.4); color: #f39c12; text-align: left; border-radius: var(--radius-sm); padding: 8px 10px; position: absolute; z-index: 1; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); opacity: 0; transition: opacity 0.2s; font-size: 0.75rem; line-height: 1.3; box-shadow: 0 4px 12px rgba(0,0,0,0.35); pointer-events: none; text-transform: none; font-weight: normal; letter-spacing: normal;">
+                                    <strong>Experimental:</strong> Bulk recording requires a high-performance PC with a good CPU and free RAM.
+                                </span>
+                            </span>
+                        </div>
                         <div class="stepper">
                             <button onclick="changeBulk(-1)" aria-label="Decrease">&minus;</button>
                             <input type="text" id="bulk" value="1" readonly />

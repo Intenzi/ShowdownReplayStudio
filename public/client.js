@@ -62,7 +62,16 @@ function applyConfig(cfg) {
 
   if (speed) speed.value = cfg.speed;
   if (theme) theme.value = cfg.theme;
-  if (bulk) bulk.value = cfg.bulk;
+
+  let bulkVal = cfg.bulk;
+  if (bulkVal === "all" || parseInt(bulkVal) > 3) {
+    bulkVal = 1;
+  } else {
+    bulkVal = Math.max(1, parseInt(bulkVal) || 1);
+  }
+  if (bulk) bulk.value = bulkVal;
+  updateBulkWarning(bulkVal);
+
   if (folderPath)
     folderPath.textContent = cfg.outputFolder || "No folder selected";
   if (setupFolderPath)
@@ -74,6 +83,16 @@ function applyConfig(cfg) {
   else setAudio("all");
 
   setChat(cfg.nochat ? "hide" : "show");
+}
+
+function updateBulkWarning(val) {
+  const warning = document.getElementById("bulkWarning");
+  if (!warning) return;
+  if (val > 1) {
+    warning.classList.remove("hidden");
+  } else {
+    warning.classList.add("hidden");
+  }
 }
 
 function updateStatus(status) {
@@ -132,17 +151,15 @@ function changeBulk(delta) {
   const input = document.getElementById("bulk");
   if (!input) return;
 
-  let currentStr = input.value;
-  let currentNum = currentStr === "all" ? 11 : parseInt(currentStr) || 1;
+  let currentNum = parseInt(input.value) || 1;
   let next = currentNum + delta;
 
   if (next < 1) next = 1;
-  if (next > 10) {
-    input.value = "all";
-  } else {
-    input.value = next;
-  }
-  
+  if (next > 3) next = 3;
+
+  input.value = next;
+  updateBulkWarning(next);
+
   updateConfig();
 }
 
