@@ -273,6 +273,11 @@ async function download(
     }
     stream.pipe(file);
 
+    let chunkCount = 0;
+    stream.on("data", () => {
+      chunkCount++;
+    });
+
     const estTime = ((totalTurns * 7) / 60).toFixed(1);
     emitLog?.(
       `⚔️ Recording: ${playersLabel} (${data.format}) | ${totalTurns} turns (~${estTime}m)`,
@@ -302,8 +307,14 @@ async function download(
     await waitUntilVictory(600000, page, updateProgress, signal);
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
-    await new Promise((resolve) => setTimeout(resolve, 500)); // Buffer for animations and encoder flushing
-    if (signal?.aborted) throw new Error("Recording cancelled.");
+    // Wait for one additional recorded chunk after the battle has finished.
+    // The recorder buffers encoded video internally, so stopping immediately
+    // after victory can truncate the ending before the final data is emitted.
+    const chunksAtVictory = chunkCount;
+    while (chunkCount === chunksAtVictory) {
+      if (signal?.aborted) throw new Error("Recording cancelled.");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
 
     // 6. Cleanup Stream
     if (stream) {
@@ -311,8 +322,11 @@ async function download(
       stream.destroy();
     }
     if (file) {
-      file.end();
-      await new Promise((resolve) => file.on("finish", resolve));
+      await new Promise((resolve, reject) => {
+        file.once("finish", resolve);
+        file.once("error", reject);
+        file.end();
+      });
     }
 
     // 7. Verify Integrity
