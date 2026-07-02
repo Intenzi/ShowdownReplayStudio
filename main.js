@@ -264,7 +264,9 @@ async function launchOptimizedBrowser(width, height) {
         if (fs.existsSync(metaDir)) {
           try {
             fs.rmSync(metaDir, { recursive: true, force: true });
-          } catch (err) {}
+          } catch (err) {
+              console.log(`[System] Failed to remove _metadata: ${err.code} ${err.message}`);
+          }
         }
       }
       enableExtensions.push(...paths);
