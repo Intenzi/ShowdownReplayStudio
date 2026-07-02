@@ -307,29 +307,23 @@ async function download(
     await waitUntilVictory(600000, page, updateProgress, signal);
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
-    // Wait for one additional recorded chunk after the battle has finished.
-    // The recorder buffers encoded video internally, so stopping immediately
-    // after victory can truncate the ending before the final data is emitted.
-    const chunksAtVictory = chunkCount;
-    while (chunkCount === chunksAtVictory) {
-      if (signal?.aborted) throw new Error("Recording cancelled.");
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    // Wait 1 second after victory to let the final screen settle for better UX
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (signal?.aborted) throw new Error("Recording cancelled.");
 
-    // 6. Cleanup Stream
-    if (stream) {
-      stream.unpipe(file);
-      stream.destroy();
-    }
+    // Closing Page to flush buffers and end stream properly
+    await page.close();
     if (file) {
       await new Promise((resolve, reject) => {
-        file.once("finish", resolve);
-        file.once("error", reject);
-        file.end();
+        file.once("finish", () => {
+          resolve();
+        });
+        file.once("error", (err) => {
+          reject(err);
+        });
       });
     }
 
-    // 7. Verify Integrity
     const stats = fs.statSync(finalPath);
     if (stats.size < 1000)
       throw new Error(`Stream capture failed (empty file).`);
