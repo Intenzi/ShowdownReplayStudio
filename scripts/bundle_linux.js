@@ -60,6 +60,19 @@ if (fs.existsSync(ublockSrc)) {
   }
 }
 
+// FFmpeg
+try {
+  const ffmpegSrc = require("ffmpeg-static");
+  const ffmpegDest = path.join(RESOURCES_DIR, "ffmpeg");
+  if (ffmpegSrc && fs.existsSync(ffmpegSrc)) {
+    console.log("🎞️ Bundling FFmpeg binary...");
+    fs.copyFileSync(ffmpegSrc, ffmpegDest);
+    fs.chmodSync(ffmpegDest, 0o755);
+  }
+} catch (err) {
+  console.warn("⚠️ FFmpeg binary not found in ffmpeg-static.");
+}
+
 // Chromium
 const chromiumDest = path.join(RESOURCES_DIR, "chromium");
 if (fs.existsSync(chromiumSrc)) {

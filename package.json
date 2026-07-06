@@ -6,6 +6,7 @@
   "bin": "main.js",
   "scripts": {
     "start": "node main.js",
+    "postinstall": "node scripts/postinstall.js",
     "pkg": "pkg . --public",
     "build:win": "pkg . --targets node18-win-x64 --output dist/showdown-studio-win.exe --compress GZip",
     "bundle:win": "node scripts/bundle_win.js",
