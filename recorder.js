@@ -260,7 +260,8 @@ async function download(
           maxWidth: captureWidth,
           maxHeight: captureHeight
         }
-      }
+      },
+      delay: 2000  // for slower pcs with audio sync delay
     });
 
     try {
