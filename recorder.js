@@ -246,22 +246,28 @@ async function download(
 
 
     // 4. Start Streaming
-    file = fs.createWriteStream(finalPath);
+    const isLinux = process.platform === "linux";
+    const tempWebmPath = path.join(outputFolder, `replay-${fileId}.webm`);
+    const writePath = isLinux ? tempWebmPath : finalPath;
+
+    file = fs.createWriteStream(writePath);
     const captureWidth = nochat ? 642 : 1100;
     const captureHeight = 362;
     stream = await getStream(page, {
-      audio: true,
-      video: true,
-      mimeType: "video/mp4;codecs=avc1,mp4a.40.2",
-      videoConstraints: {
-        mandatory: {
-          minWidth: captureWidth,
-          minHeight: captureHeight,
-          maxWidth: captureWidth,
-          maxHeight: captureHeight
-        }
-      },
-      delay: 2000  // for slower pcs with audio sync delay
+        audio: true,
+        video: true,
+        mimeType: isLinux
+            ? 'video/webm;codecs=vp9'
+            : 'video/mp4;codecs=avc1,mp4a.40.2',
+        videoConstraints: {
+            mandatory: {
+                minWidth: captureWidth,
+                minHeight: captureHeight,
+                maxWidth: captureWidth,
+                maxHeight: captureHeight,
+            },
+        },
+        delay: 2000, // for slower pcs with audio sync delay
     });
 
     try {
@@ -325,6 +331,45 @@ async function download(
       });
     }
 
+    // Transcode WebM to MP4 on Linux
+    if (isLinux) {
+      console.log(`[Recorder] Converting WebM to MP4 for Linux compatibility...`);
+      let ffmpegPath = null;
+      try {
+        const appDir = path.dirname(process.execPath);
+        const bundledFfmpeg = path.join(appDir, "resources", "ffmpeg");
+        if (fs.existsSync(bundledFfmpeg)) {
+          ffmpegPath = bundledFfmpeg;
+        } else {
+          ffmpegPath = require("ffmpeg-static");
+        }
+      } catch (err) {
+        ffmpegPath = require("ffmpeg-static");
+      }
+
+      const ffmpeg = require("fluent-ffmpeg");
+      ffmpeg.setFfmpegPath(ffmpegPath);
+
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempWebmPath)
+          .output(finalPath)
+          .videoCodec("libx264")
+          .audioCodec("aac")
+          .on("end", () => {
+            console.log(`[Recorder] Conversion completed successfully.`);
+            try {
+              fs.unlinkSync(tempWebmPath);
+            } catch {}
+            resolve();
+          })
+          .on("error", (err) => {
+            console.error(`[Recorder] Conversion failed:`, err);
+            reject(err);
+          })
+          .run();
+      });
+    }
+
     const stats = fs.statSync(finalPath);
     if (stats.size < 1000)
       throw new Error(`Stream capture failed (empty file).`);
@@ -349,6 +394,11 @@ async function download(
 
     try {
       if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+    } catch {}
+    try {
+      if (typeof tempWebmPath !== "undefined" && fs.existsSync(tempWebmPath)) {
+        fs.unlinkSync(tempWebmPath);
+      }
     } catch {}
 
     if (err.message === "Recording cancelled.") {
