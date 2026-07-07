@@ -57,6 +57,41 @@ async function waitUntilVictory(timeout, page, onProgress, signal) {
 }
 
 /**
+ * BROWSER LOGIC: Turn Detection & Victory State for Local HTML Files.
+ *
+ * Queries the DOM directly on the battle screen:
+ * - Extracts the active turn number from the '.innerbattle .turn' element.
+ * - Identifies victory completion by checking '.innerbattle .messagebar' content.
+ */
+async function waitUntilVictoryLocal(timeout, page, onProgress, signal) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    if (signal?.aborted) return false;
+
+    try {
+      const { turnNumber, victory } = await page.evaluate(`(() => {
+        const turnDiv = document.querySelector(".innerbattle .turn");
+        const msgBar = document.querySelector(".innerbattle .messagebar");
+        return {
+          turnNumber: turnDiv ? parseInt(turnDiv.innerText.replace("Turn ", "")) || 0 : 0,
+          victory: msgBar ? msgBar.textContent.trim().endsWith("won the battle!") : false,
+        };
+      })()`);
+
+      if (onProgress) onProgress(turnNumber);
+
+      if (victory) {
+        return true;
+      }
+    } catch (err) {}
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return false; // Timeout reached
+}
+
+/**
  * MAIN RECORDING PIPELINE
  */
 async function download(
@@ -183,11 +218,10 @@ async function download(
       if (backdrop) backdrop.remove();
     })()`);
 
-    emitProgress?.(id, link, "preparing");
-    await page.waitForSelector(".playbutton");
-
-    // Apply User Preferences
     const isLocal = link.startsWith("file://");
+    emitProgress?.(id, link, "preparing");
+
+    await page.waitForSelector(".playbutton");
     await page.evaluate(`(({ isLocal, speed, nomusic, noaudio, theme }) => {
       if (isLocal) {
         // 1. Playback Speed
@@ -242,7 +276,9 @@ async function download(
       // Proceed even if some tracker/ad hangs the network
     }
 
-    await page.click(".playbutton");
+    if (!isLocal) {
+      await page.click(".playbutton");
+    }
 
 
     // 4. Start Streaming
@@ -311,7 +347,11 @@ async function download(
     updateProgress(0);
 
     // 5. Wait for Conclusion
-    await waitUntilVictory(600000, page, updateProgress, signal);
+    if (isLocal) {
+      await waitUntilVictoryLocal(600000, page, updateProgress, signal);
+    } else {
+      await waitUntilVictory(600000, page, updateProgress, signal);
+    }
     if (signal?.aborted) throw new Error("Recording cancelled.");
 
     // Wait 1 second after victory to let the final screen settle for better UX
