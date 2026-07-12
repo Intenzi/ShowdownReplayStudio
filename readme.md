@@ -55,7 +55,7 @@ Join the [discord server](https://discord.gg/dvcbNJu5zS) for any setup queries!
 ### Windows users:
 
 1. No Setup required!
-2. Head to Releases and download the latest release for your Operating System. Unzip the folder.
+2. Head to Releases and download the [latest release](https://github.com/Intenzi/ShowdownReplayStudio/releases/latest) for your Operating System. Unzip the folder.
 3. Open the `Showdown Replay Studio.exe`
 
 ### For macOS & Linux users:
