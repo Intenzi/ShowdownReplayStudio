@@ -86,10 +86,10 @@ Read more about it at [DEVELOPMENT.md](DEVELOPMENT.md)
 
 A huge thankyou to everyone who helped test the complete rewrite and provided invaluable feedback to make this project work across everyone's devices (in no particular order):
 
-- @kshitij-ka
-- @Soul-8961
-- @zukigay
-- @ShivaD173
+- [@kshitij-ka](https://github.com/kshitij-ka)
+- [@Soul-8691](https://github.com/Soul-8691)
+- [@zukigay](https://github.com/zukigay)
+- [@ShivaD173](https://github.com/ShivaD173)
 
 ### 🌸 Like the project?
 
