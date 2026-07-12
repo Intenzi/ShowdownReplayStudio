@@ -13,7 +13,7 @@ Additionally you can download locally saved HTML file replays into mp4 recording
 
 https://github.com/user-attachments/assets/1ed90374-360f-4153-85a2-e33f21c2a06b
 
-Replays recorded in Demo recording:
+Replays recorded in Demo recording (unmute audio):
 
 https://github.com/user-attachments/assets/9a8815d3-fb1a-40c4-84a8-ba9fff9489fc
 
